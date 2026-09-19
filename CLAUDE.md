@@ -12,8 +12,9 @@ build from local CASC. CASC reading is **verified working** — do not re-litiga
 this layer.
 
 Outstanding:
-- [ ] DB2s not yet extracted in WTL (the "DBCs missing, extract?" action)
-- [ ] DBD directory not configured — WTL is using the remote manifest
+- [x] DB2s extracted in WTL
+- [x] DBD directory configured — `definitionDir` points at
+      `vendor/WoWDBDefs/definitions`, no longer the remote manifest
 - [x] `builds.json` seeded with 1.60.1.69913 (5a6cc43)
 - [ ] Only one Forever build known locally, so diffing is not yet possible
 
@@ -150,9 +151,18 @@ Log and continue. Only investigate if the set changes between builds.
 - **DB2 layouts are Classic-flavor, not retail.** WoWDBDefs resolves via
   layouthash, but Forever is new — expect unknown columns in new tables. Name
   them `unk_<offset>`; never guess a meaning in committed output.
-- **Forever has a graphical update over Classic.** Expect new and renamed model
-  and texture paths the listfile does not yet cover. Unnamed files are normal,
-  especially in early builds.
+- **Listfile coverage is high: 2,274,258 named files for 1.60.1.69913.**
+  Forever has a graphical update over Classic, so some new and renamed model
+  and texture paths are still uncovered — but the community listfile lands
+  the overwhelming majority. **Unnamed-file classification is therefore
+  lower priority than originally planned.** Do not invest in magic-byte
+  identification ahead of work on named data; revisit only if coverage
+  drops sharply in a future build.
+- **Hotfixes are a separate diffable source.** WTL loads live hotfix data
+  from the client's `Cache/ADB/enUS` directory and tracks push IDs. This is
+  distinct from the static DB2s shipped in the build: hotfixes are Blizzard
+  tuning live data between client patches. Diffing them answers a different
+  question than diffing DB2s, and the two must not be conflated.
 - **Encryption.** Blizzard withholds Salsa20 keys for unreleased content.
   Encrypted files fail to decode until keys land in `TACTKeys`. Always
   skip-and-log, never error the run.
@@ -194,9 +204,11 @@ apply to the libraries.
 │   └── diff_builds.py       # compare two build dirs, emit markdown
 ├── out/                     # GITIGNORED — extracted data
 │   └── <version>.<build>/
-│       ├── db2/*.csv
-│       ├── files.csv        # fdid, path, size, encrypted, content_type
-│       └── manifest.json    # row counts, layouthashes, metrics
+│       ├── db2/*.csv           # plain DB2s, as shipped in the build
+│       ├── db2_hotfixed/*.csv  # same tables with the hotfix overlay applied
+│       ├── hotfixes.csv        # push IDs + changed rows from Cache/ADB/enUS
+│       ├── files.csv           # fdid, path, size, encrypted, content_type
+│       └── manifest.json       # row counts, layouthashes, metrics
 ├── reports/                 # COMMITTED — diff output
 │   └── <from>_to_<to>.md
 └── vendor/                  # GITIGNORED — cloned third-party tools
@@ -229,6 +241,12 @@ regions but `cn` can lag or diverge.
 - **Read WTL's source for route shapes.** Do not guess HTTP endpoints.
 - **Diffs are the deliverable.** Raw extraction is a means to an end; the
   markdown reports are what this project produces.
+- **Extract every table twice: with and without the hotfix overlay.** Plain
+  DB2 output goes to `db2/`, hotfix-applied output to `db2_hotfixed/`.
+  Keeping them separate is what makes a client patch distinguishable from
+  live tuning — a value that moves only in `db2_hotfixed/` was hotfixed, one
+  that moves in both shipped in the build. Collapsing them into a single
+  output loses that distinction permanently.
 - **Cap concurrency at ~8.** CASC reads are IO-bound; oversubscribing thrashes
   the disk.
 
@@ -247,7 +265,9 @@ regions but `cn` can lag or diverge.
    on disk first, and WTL silently falls back to the remote manifest if it
    does not.
 5. Point WTL's `definitionDir` at `vendor/WoWDBDefs/definitions`, then start
-   WTL and extract DBCs for the new build.
+   WTL and extract DBCs for the new build. **Press "Update WoWDBDefs & clear
+   cache" on the DBC page after `sync_refs.py`** — WTL caches definitions and
+   will keep using the stale set from the previous build otherwise.
 6. Run `inventory.py` and `extract_db2.py`.
 7. Diff against the previous Forever build.
 8. Commit `builds.json` and the new report.
