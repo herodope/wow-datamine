@@ -79,6 +79,31 @@ def report_path(from_version: str, to_version: str) -> Path:
     return REPORTS_DIR / f"{from_version}_to_{to_version}.md"
 
 
+# --- Reference data (vendor/) ---------------------------------------------
+
+# Third-party repos cloned into VENDOR_DIR by sync_refs.py. Read-only mirrors:
+# they are refreshed to match upstream exactly, never committed to.
+REF_REPOS = {
+    "WoWDBDefs": "https://github.com/wowdev/WoWDBDefs.git",
+    "wow-listfile": "https://github.com/wowdev/wow-listfile.git",
+    "TACTKeys": "https://github.com/wowdev/TACTKeys.git",
+}
+
+WOWDBDEFS_DIR = VENDOR_DIR / "WoWDBDefs"
+DEFINITIONS_DIR = WOWDBDEFS_DIR / "definitions"   # WTL's definitionDir
+LISTFILE_REPO_DIR = VENDOR_DIR / "wow-listfile"
+TACTKEYS_DIR = VENDOR_DIR / "TACTKeys"
+TACTKEYS_FILE = TACTKEYS_DIR / "WoW.txt"
+
+# The prebuilt listfile release, not the repo's split "parts" directory. This
+# is the same file WTL downloads by default.
+LISTFILE_URL = "https://github.com/wowdev/wow-listfile/releases/latest/download/community-listfile-withcapitals.csv"
+LISTFILE_CSV = VENDOR_DIR / "community-listfile-withcapitals.csv"
+
+WTL_DIR = VENDOR_DIR / "wow.tools.local"
+WTL_URL = "http://localhost:5080"
+
+
 # --- Extraction -------------------------------------------------------------
 
 # CASC reads are IO-bound; oversubscribing thrashes the disk.

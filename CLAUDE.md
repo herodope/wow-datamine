@@ -14,7 +14,7 @@ this layer.
 Outstanding:
 - [ ] DB2s not yet extracted in WTL (the "DBCs missing, extract?" action)
 - [ ] DBD directory not configured — WTL is using the remote manifest
-- [ ] `builds.json` not yet seeded
+- [x] `builds.json` seeded with 1.60.1.69913 (5a6cc43)
 - [ ] Only one Forever build known locally, so diffing is not yet possible
 
 ---
@@ -85,7 +85,7 @@ genuinely insufficient for a specific need. Rebuilding that stack is a large
 amount of code that duplicates working, maintained functionality.
 
 When a script needs a WTL route, **read the controllers in
-`vendor/wow.tools.local` to find it.** Never guess route shapes.
+`vendor/wow.tools.local/Controllers/` to find it.** Never guess route shapes.
 
 TACTSharp stays built in `vendor/` as an escape hatch for raw file extraction
 and CDN-only builds that WTL will not load.
@@ -241,8 +241,13 @@ regions but `cn` can lag or diverge.
 2. Close WoW and idle Battle.net.
 3. Run `fetch_builds.py` — capture the new `buildConfig` / `cdnConfig` into
    `builds.json` **before anything else**. Unrecoverable if skipped.
-4. Run `sync_refs.py`.
-5. Start WTL, extract DBCs for the new build.
+4. Run `sync_refs.py` — clones/updates WoWDBDefs, the listfile and TACTKeys
+   into `vendor/`. This must happen **before** WTL's DBD directory is
+   configured or used: `definitionDir` points at a clone that has to exist
+   on disk first, and WTL silently falls back to the remote manifest if it
+   does not.
+5. Point WTL's `definitionDir` at `vendor/WoWDBDefs/definitions`, then start
+   WTL and extract DBCs for the new build.
 6. Run `inventory.py` and `extract_db2.py`.
 7. Diff against the previous Forever build.
 8. Commit `builds.json` and the new report.
