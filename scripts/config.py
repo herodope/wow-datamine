@@ -15,7 +15,7 @@ from pathlib import Path
 # that has lived on this product.
 PRODUCT_CODE = "wow_classic_beta"
 
-INSTALL_ROOT = Path(r"C:\Program Files (x86)\World of Warcraft")
+INSTALL_ROOT = Path(r"A:\World of Warcraft")
 FLAVOR_DIR = "_classic_beta_"
 GAME_DIR = INSTALL_ROOT / FLAVOR_DIR
 
