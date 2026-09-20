@@ -672,6 +672,52 @@ regions but `cn` can lag or diverge.
   is not running, write the finding down as unexercised and **promote it only
   after a response confirms it**. A hypothesis recorded honestly is useful;
   a hypothesis recorded as fact is a trap with this project's name on it.
+- **A fix that works does not confirm the diagnosis that motivated it.**
+  Symptom, fix and mechanism are three separate claims. A fix landing and the
+  symptom going away establishes the first two. The **mechanism has to be
+  measured on its own**, because a correct fix sitting next to a wrong
+  explanation looks exactly like a correct fix sitting next to a right one —
+  and it is the explanation that gets reused on the next problem.
+
+  The worked example. Three builds produced byte-identical `files.csv`.
+  `inventory.py` was found to read row indices `0, 1, 4, 5` and never index 3,
+  `availableInBuild`, and the conclusion drawn — and stated as fact — was that
+  every other column comes from the global listfile, so the output could not be
+  build-specific and the encrypted-file count "cannot change no matter what
+  Blizzard does". Two real defects were then fixed on that basis.
+
+  The mechanism was wrong. `ListfileController.cs:208` already intersects
+  `Listfile.NameMap` with `CASC.AvailableFDIDs` before paging, so the route
+  **only ever returns in-build files** and ignoring column 3 changed nothing.
+  Measured after the fix: `skipped_not_in_build = 0`, and the fixed script
+  reproduced the original CSV **byte for byte** — same SHA-256,
+  `86733ec34aee…`. Neither defect could have caused the symptom:
+
+  | Claim | Status |
+  |---|---|
+  | `availableInBuild` was unread | **true**, and worth fixing for the `showAllFiles` case |
+  | `without_name` used the forbidden subtraction | **true**, reported 0 against 19,583 |
+  | Either caused the identical hashes | **false** — one was a no-op, the other never touched a row |
+  | The file set is identical across all three builds | **true**, and it is the whole explanation |
+
+  The identical inventories were real data: only 2 of 610 shipped DB2 tables
+  differ across 69876/69893/69913, so an unchanged file set is exactly what to
+  expect. An assertion was added to fail on identical hashes, on the assumption
+  that identical meant broken; it fires on correct data and is a false positive
+  by construction.
+
+  **This is the second instance of source-read reasoning committed as fact**,
+  after the `build=` meta-route rule (`7655839` → `7575f2c`). Both followed the
+  same shape: read the code, build a mechanism that explained the symptom, skip
+  the measurement because the reasoning felt tight, write it down as fact. The
+  reasoning being *sound* is what makes it dangerous — it was sound and still
+  wrong, because it rested on an unread line thirty lines away.
+
+  Practically: when a symptom motivates a fix, **state the mechanism as a
+  separate, testable claim and measure it separately.** "Does the fix remove
+  the symptom" and "is my explanation of the symptom correct" are different
+  experiments. Here the second one cost a single request — sampling
+  `availableInBuild` over 20,000 rows and finding every value `true`.
 - **Diffs are the deliverable.** Raw extraction is a means to an end; the
   markdown reports are what this project produces.
 - **Extract every table twice: with and without the hotfix overlay.** Plain

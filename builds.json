@@ -1,10 +1,29 @@
 {
+  "69876": {
+    "version": "1.60.1.69876",
+    "buildId": 69876,
+    "buildConfig": "e7fab7248766e9e7daddb3b6083c9c3c",
+    "cdnConfig": "272d201d5b2d6fec8fdb4aa59b2a9eea",
+    "region": "us",
+    "firstSeen": "2026-09-16T18:23:04+00:00",
+    "source": "wtl-archive"
+  },
+  "69893": {
+    "version": "1.60.1.69893",
+    "buildId": 69893,
+    "buildConfig": "5aa0eecfa8d49f5ad01221dbc8601144",
+    "cdnConfig": "c39a363b4a67449d8f16736dba987a43",
+    "region": "us",
+    "firstSeen": "2026-09-16T23:14:03+00:00",
+    "source": "wtl-archive"
+  },
   "69913": {
     "version": "1.60.1.69913",
     "buildId": 69913,
     "buildConfig": "6c0df97e8e481a9a41600e373367c200",
     "cdnConfig": "5525ea1ce6668e895569c89c2d6a154c",
     "region": "us",
-    "firstSeen": "2026-09-19T21:12:34+00:00"
+    "firstSeen": "2026-09-19T21:12:34+00:00",
+    "source": "version-endpoint"
   }
 }
