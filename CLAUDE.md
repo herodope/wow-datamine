@@ -525,6 +525,50 @@ confirms the hotfix was a stopgap ahead of a real fix — and whether new
 contamination appears. `scripts/contamination.py` reports this automatically;
 a *new* HIGH-confidence finding is the thing to look at.
 
+### 6. The encrypted-count detector is untested and reports MATCH
+
+`inventory.py` compares the encrypted-file count against a hardcoded baseline
+of **5035** and prints `MATCH` or `DIFFERS`. It has now passed on three builds:
+
+| Build | files | encrypted | UnknownKey | ButNot | files.csv SHA-256 |
+|---|---|---|---|---|---|
+| 69876 | 1,441,771 | 5,035 | 3,371 | 1,664 | `86733ec34aee…` |
+| 69893 | 1,441,771 | 5,035 | 3,371 | 1,664 | `86733ec34aee…` |
+| 69913 | 1,441,771 | 5,035 | 3,371 | 1,664 | `86733ec34aee…` |
+
+**All three file sets are byte-identical**, so the detector has never been
+shown data that could make it fail. Three passes is one observation repeated
+three times. CLAUDE.md calls a drop in this count "one of the highest-value
+early signals" — on the evidence so far it is an **untested detector reporting
+MATCH**, which is precisely the category the identical-hash check in
+`inventory.py` was in until it was pointed at real data and turned out to fail
+on every correct run.
+
+A `MATCH` is only a measurement if the file set moved and the encrypted count
+did not. If neither moved, `MATCH` carries no information about encryption at
+all — it is restating that the build did not change.
+
+**The first real test is 1.60.2.** What to record when it lands:
+
+- whether `files.csv` differs from 69913's at all. If it does not, the
+  encrypted result is still untested and must be reported as such rather than
+  as a pass.
+- whether the encrypted total moved, and **which way**. A drop means keys
+  leaked or content unlocked; a rise means new encrypted content shipped.
+- the `EncryptedUnknownKey` / `EncryptedButNot` split separately from the
+  total. The two can move in opposite directions and cancel — 3,371 / 1,664
+  summing to 5,035 could become 3,300 / 1,735 with the total unchanged, and a
+  total-only check reports `MATCH` through a real key release.
+
+**Change needed either way:** `inventory.py` should report whether the file set
+changed **alongside** the encrypted count, so a passing result cannot be read
+as a measurement when it isn't. The identical-inventory warning already
+computes the hash needed for this; the two should be reported together rather
+than as unrelated lines. The 5035 baseline should also stop being a magic
+number in the script — it belongs with the other per-build baselines, or it
+should be read from the previous build's manifest so it tracks reality instead
+of a constant frozen at 1.60.1.69913.
+
 ---
 
 ## Key facts
