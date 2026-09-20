@@ -226,7 +226,13 @@ surfaced in the response — a table missing from the ZIP is indistinguishable
 from a table that failed. Prefer per-table calls when you need to account for
 failures.
 
-### Extract DB2s to disk — `GET /dbc/export/alltodisk` ⚠️ source-read
+Left ⚠️ deliberately: it is read-only, but it builds all 1,161 tables into one
+in-memory ZIP -- a full extraction's work for a result `extract_db2.py`
+already produces per-table, with per-table error accounting this route does
+not offer. There is nothing to learn from running it that the per-table route
+has not already shown.
+
+### Extract DB2s to disk — `GET /dbc/export/alltodisk` ✅ measured
 
 | Param | Type | Default |
 |---|---|---|
@@ -473,7 +479,26 @@ hotfix, not when Blizzard pushed it. `tableIsKnown` is `"1"`/`"0"`.
 Ordering is fixed in SQL: `firstdetected DESC, pushID DESC, tableName DESC,
 recordID DESC`. `length` is applied as a SQL `LIMIT`, so paging is server-side.
 
-### Download latest hotfixes — `GET /dbc/hotfixes/downloadLatest` ⚠️ source-read
+### Download latest hotfixes — `GET /dbc/hotfixes/downloadLatest` ⚠️ source-read — **do not run on this install**
+
+> **It imports another game's hotfixes into the local database, permanently.**
+> `branch` accepts only `retail`, `ptr` or `beta` — there is no
+> `wow_classic_beta` option. It fetches
+> `storage.googleapis.com/raidbots-static/wow/<branch>/enUS/DBCache.bin`,
+> writes it to `caches/`, and calls `HotfixManager.ParseCache`, which
+> **INSERTs into the `wow_hotfixes`, `wow_hotfixes_data` and
+> `wow_hotfixpushxbuild` SQLite tables** (`HotfixManager.cs:187`, `:202`,
+> `:179`).
+>
+> `/dbc/hotfixes/list` counts that table unfiltered
+> (`SELECT COUNT(*) FROM wow_hotfixes`), so the measured 26,542-record
+> baseline for 1.60.1.69913 would change and `diff_hotfixes.py` would be
+> reading a mixture of two games. There is no delete route and no undo.
+>
+> Records are keyed on the build ID inside the DBCache, so a retail import
+> would not corrupt the `useHotfixes` overlay for a 1.60.x build — but it
+> would permanently pollute the hotfix table this project diffs. Deliberately
+> left unexercised for that reason, not for lack of opportunity.
 
 | Param | Type |
 |---|---|
@@ -551,12 +576,12 @@ post-call export of `itemsearchname` logged
 been served minutes earlier — the entry was gone and was rebuilt from the
 on-disk DB2.
 
-### `GET /dbc/reloadDefs` ⚠️ source-read
+### `GET /dbc/reloadDefs` ✅ measured
 
 Same, plus clearing the enum provider cache and `HotfixManager`. Does not touch
 the DBD manifest.
 
-### `GET /dbc/reloadHotfixes` ⚠️ source-read
+### `GET /dbc/reloadHotfixes` ✅ measured
 
 Clears hotfix state and re-reads the DBCache files. Returns
 `"Reloaded hotfixes"`. Needed after the client writes new hotfix data —
@@ -1205,7 +1230,19 @@ lines below them. The live response settled it.
 | `GET /dbc/labelColumns` | 12 entries, all `Table::LabelID` — not display-name columns |
 | `GET /dbc/header/Light` | `ContinentID → Map::ID`, `LightParamsID[0..7] → LightParams::ID`, no unverifieds |
 
-A third pass, same day, cleared every non-mutating route that was still ⚠️:
+A fourth pass exercised the mutating routes, between extraction runs, with
+WTL serving 1.60.1.69913:
+
+| Route | Result |
+|---|---|
+| `GET /dbc/reloadDefs` | 200, `Reloaded 1342 definitions and cleared DBC cache!`, 3.35s — same body as `/dbc/updateDefs`, and 1342 is the **unfiltered** definition count |
+| `GET /dbc/reloadHotfixes` | 200, `Reloaded hotfixes`, 0.56s; the hotfix table still reports 26,542 records afterwards, so it is non-destructive |
+| `GET /dbc/export/alltodisk` | 200, `true`, 0.78s, 1161 `.db2` files — idempotent on a re-run, and fast because CASC is already cached |
+
+`/dbc/hotfixes/downloadLatest` was **not** run; see the warning on its section.
+It is the one route here that permanently alters data this project depends on.
+
+A third pass cleared every non-mutating route that was still ⚠️:
 
 | Route | Result |
 |---|---|
