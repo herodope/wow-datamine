@@ -163,6 +163,14 @@ against a live instance on 1.60.1.69913.
   separate `TryGetValue` fallback. Trusting the search token would report
   nothing to classify when in fact 99,348 files needed it. Read the column,
   never the token.
+- **`recordsFiltered == recordsTotal` proves NameMap *membership*, not a
+  non-empty name.** `/listfile/files` iterates `Listfile.NameMap`, so its
+  unfiltered `recordsFiltered` counts rows that are *in* the map — including
+  those whose name is the empty string. At 1.60.1.69913 both counts are
+  1,441,771, which reads as "nothing is unnamed", but 19,583 of those rows
+  carry an empty filename. **Count empty values in the filename column
+  (index 1); do not infer naming coverage from the two totals matching.**
+  This exact wrong inference was made here once and committed.
 - **WTL exposes no per-file size over HTTP.** `/size/data` only aggregates
   (`results[type] += fileSize`), and every other route works from
   `Listfile.NameMap`, which carries no size. Real per-file sizes live in the
@@ -346,14 +354,22 @@ a *new* HIGH-confidence finding is the thing to look at.
 - **DB2 layouts are Classic-flavor, not retail.** WoWDBDefs resolves via
   layouthash, but Forever is new — expect unknown columns in new tables. Name
   them `unk_<offset>`; never guess a meaning in committed output.
-- **Naming is not the gap; typing is.** This build contains **1,441,771**
-  files, and **every one of them has a listfile name** — zero unnamed.
+- **Typing is the bigger gap, but naming is not zero.** This build contains
+  **1,441,771** files. **19,583 of them (1.4%) have an empty name** despite
+  being members of `Listfile.NameMap` — of those, 11,842 remain `unk` and
+  7,721 were classified as `blp` by the magic-byte pass. An earlier revision
+  of this file claimed zero unnamed files; that was wrong, and the mistake is
+  recorded as a gotcha below because the API makes it easy to repeat.
   (2,274,258 is the *listfile's* total size across the whole retail FDID
-  namespace, not a count for this build. Do not conflate the two.)
-  But **99,348 files had no `content_type`**, and a magic-byte pass
+  namespace, not a count for this build. Do not conflate the two — though
+  note **2,274,258 − 2,254,675 = 19,583**, exactly the empty-name count, which
+  is what the discrepancy between the listfile release's row count and the
+  named-file figure was all along.)
+  On typing: **99,348 files had no `content_type`**, and a magic-byte pass
   recovered **87,506** of them — 79,784 as `wmo_or_adt` — leaving 11,842
   still unknown. **Magic-byte classification is valuable and worth
-  maintaining.** What is not worth chasing is filename recovery.
+  maintaining.** Filename recovery is the lower-value half, but it is not a
+  solved problem either.
 - **Hotfixes are a separate diffable source.** WTL loads live hotfix data
   from the client's `Cache/ADB/enUS` directory and tracks push IDs. This is
   distinct from the static DB2s shipped in the build: hotfixes are Blizzard

@@ -256,29 +256,8 @@ def summarize_pushes(index, table, keys):
 
 
 def render_contamination(findings):
-    """Suspected retail leftovers, highest confidence first."""
-    L = ["## Retail contamination", ""]
-    if not findings:
-        L += ["No suspected retail contamination detected in this diff.", "", "---", ""]
-        return L
-
-    L.append(
-        "Rows that look like retail-era data in a Classic+ build. `wow_classic_beta` "
-        "is a recycled product code and Forever shares tooling with retail, so these "
-        "turn up and get pruned over time — a **new** one appearing is itself a signal."
-    )
-    L.append("")
-    L.append("| Confidence | Rule | Table | Record | Detail |")
-    L.append("|---|---|---|---|---|")
-    for f in findings:
-        L.append(
-            f"| {f['confidence'].upper()} | `{f['rule']}` | `{f['table']}` | "
-            f"`{f['record']}` | {f['detail']} |"
-        )
-    L.append("")
-    L.append("---")
-    L.append("")
-    return L
+    """Suspected retail leftovers. Delegates so both diff scripts render alike."""
+    return contamination.render_markdown(findings)
 
 
 def render(build, results, index, hotfix_rows, max_rows, manifest, findings=None):

@@ -38,6 +38,17 @@ MAP_REF_COLUMNS = {"instance_id", "instanceid", "continentid", "mapid", "map_id"
 HIGH, MEDIUM = "high", "medium"
 
 
+def _rows(result, side):
+    """Rows from one side of a diff.
+
+    Hotfix diffs name the sides plain/hotfixed; build diffs name them old/new.
+    Both mean "before" and "after", so the rules work off either naming.
+    """
+    if side == "old":
+        return result.get("old_rows", result.get("plain_rows", {}))
+    return result.get("new_rows", result.get("hot_rows", {}))
+
+
 def _col(header, name):
     for i, n in enumerate(header or []):
         if n.strip().lower() == name.lower():
@@ -87,7 +98,7 @@ def _dangling_map_refs(result, ref, rows_by_key, which):
         return findings
 
     for key in rows_by_key:
-        row = result["plain_rows"].get(key) if which == "removed" else result["hot_rows"].get(key)
+        row = _rows(result, "old" if which == "removed" else "new").get(key)
         if not row:
             continue
         for i, name in targets:
@@ -151,9 +162,9 @@ def _orphan_removal(result, ref, load_table):
     if not orphans:
         return []
 
-    # Removed rows exist only on the plain side -- the hotfixed Item table no
-    # longer contains them, so load_table() cannot describe them.
-    ih, items = result["header"], result["plain_rows"]
+    # Removed rows exist only on the "before" side -- the after-side Item table
+    # no longer contains them, so load_table() cannot describe them.
+    ih, items = result["header"], _rows(result, "old")
     cls_i, sub_i = _col(ih, "ClassID"), _col(ih, "SubclassID")
     inv_i = _col(ih, "InventoryType")
     combos, invs = {}, {}
@@ -180,7 +191,7 @@ def _orphan_removal(result, ref, load_table):
             f"{sum(1 for k in items if k not in ref['items_with_data']):,} of "
             f"{len(items):,} Item rows lack display data in this build, because "
             f"ItemSparse ships incomplete and arrives by hotfix. The signal is that "
-            f"these were pulled together in one push."
+            f"these were removed together."
         ),
         "side": "removed",
     }]
@@ -199,3 +210,27 @@ def scan(results, load_table):
     order = {HIGH: 0, MEDIUM: 1}
     findings.sort(key=lambda f: (order.get(f["confidence"], 9), f["table"], str(f["record"])))
     return findings, ref
+
+
+def render_markdown(findings):
+    """The "Retail contamination" report section. Shared by both diff scripts."""
+    L = ["## Retail contamination", ""]
+    if not findings:
+        L += ["No suspected retail contamination detected in this diff.", "", "---", ""]
+        return L
+
+    L.append(
+        "Rows that look like retail-era data in a Classic+ build. `wow_classic_beta` "
+        "is a recycled product code and Forever shares tooling with retail, so these "
+        "turn up and get pruned over time — a **new** one appearing is itself a signal."
+    )
+    L.append("")
+    L.append("| Confidence | Rule | Table | Record | Detail |")
+    L.append("|---|---|---|---|---|")
+    for f in findings:
+        L.append(
+            f"| {f['confidence'].upper()} | `{f['rule']}` | `{f['table']}` | "
+            f"`{f['record']}` | {f['detail']} |"
+        )
+    L += ["", "---", ""]
+    return L

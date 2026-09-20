@@ -2,7 +2,7 @@
 
 Live hotfix data versus the DB2s as shipped in the client. Both sides come from the same build, so every difference here is something Blizzard changed **without a client patch**.
 
-Generated 2026-09-20T01:15:44+00:00
+Generated 2026-09-20T01:31:29+00:00
 
 | | |
 |---|---|
@@ -25,7 +25,7 @@ Rows that look like retail-era data in a Classic+ build. `wow_classic_beta` is a
 |---|---|---|---|---|
 | HIGH | `dangling_map_ref` | `Achievement` | `9275` | Instance_ID = 1358, a map not present in this build |
 | HIGH | `light_absent_map` | `LightParams` | `453` | replaced in Light 269.LightParamsID[2]; referenced only by Light 16161 on map(s) 3064 absent from this build |
-| MEDIUM | `orphan_removal` | `Item` | `75 rows` | 75 removed rows have no ItemSparse/ItemSearchName data (ClassID 4/SubclassID 0 × 75; InventoryType 12 × 32, InventoryType 11 × 23, InventoryType 2 × 20). Orphanhood alone is NOT a signal — 8,286 of 31,675 Item rows lack display data in this build, because ItemSparse ships incomplete and arrives by hotfix. The signal is that these were pulled together in one push. |
+| MEDIUM | `orphan_removal` | `Item` | `75 rows` | 75 removed rows have no ItemSparse/ItemSearchName data (ClassID 4/SubclassID 0 × 75; InventoryType 12 × 32, InventoryType 11 × 23, InventoryType 2 × 20). Orphanhood alone is NOT a signal — 8,286 of 31,675 Item rows lack display data in this build, because ItemSparse ships incomplete and arrives by hotfix. The signal is that these were removed together. |
 
 ---
 
