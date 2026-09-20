@@ -569,6 +569,55 @@ number in the script — it belongs with the other per-build baselines, or it
 should be read from the previous build's manifest so it tracks reality instead
 of a constant frozen at 1.60.1.69913.
 
+### 7. A parallel Thunder Clap rank ladder at modern IDs
+
+`SpellName` holds 15 rows named "Thunder Clap". Two of them are complete R1–R6
+ladders carrying the same `NameSubtext_lang` rank strings:
+
+| Rank | Classic | Modern |
+|---|---|---|
+| 1 | 6343 | 461830 |
+| 2 | 8198 | 461829 |
+| 3 | 8204 | 461828 |
+| 4 | 8205 | 461827 |
+| 5 | 11580 | 461826 |
+| 6 | 11581 | 461810 |
+
+(Plus 11582, 13532 and 413589, which carry no rank or no description.)
+
+**The modern ladder is structurally indistinguishable from the classic one.**
+Measured on 1.60.1.69913:
+
+- identical supporting-row profile across **eleven** tables — 1 row each in
+  `SpellName`, `Spell`, `SpellMisc`, `SpellLevels`, `SpellPower`,
+  `SpellCategories`, `SpellClassOptions`, `SpellCooldowns`,
+  `SpellTargetRestrictions`, `SpellShapeshift` and 2 in `SpellEffect`, for
+  every one of the six, matching the classic ranks exactly
+- **0 dangling foreign keys**, walking every FK from `/dbc/header` across all
+  nine keyed tables — same as the classic ladder
+- no contamination rule fires, and per the convention above that is
+  `not_scanned`, not clean: no spell table carries a map-reference column and
+  the other two rules are pinned to `Light` and `Item`
+
+These are **not** orphan stubs — the opposite of the 75 `Item` cases, which
+have no `ItemSparse`/`ItemSearchName` row at all.
+
+The only thing marking them out is the ID range, and per **Conventions** an ID
+range is supporting evidence, never a trigger. An earlier note in this session
+called them contamination on that basis alone; the data does not support it and
+it is withdrawn.
+
+**Watch, do not conclude:**
+
+- whether they appear in `SkillLineAbility` or any class-spell chain — not yet
+  checked, and the strongest available discriminator
+- whether they survive into 1.60.2, or are pruned the way the `Achievement`
+  and `Item` contamination was
+- whether any hotfix touches them; nothing does at 1.60.1.69913
+
+A duplicate rank ladder at modern IDs alongside a working classic one is odd.
+Odd is not a finding.
+
 ---
 
 ## Key facts
@@ -602,6 +651,31 @@ of a constant frozen at 1.60.1.69913.
 - **Encryption.** Blizzard withholds Salsa20 keys for unreleased content.
   Encrypted files fail to decode until keys land in `TACTKeys`. Always
   skip-and-log, never error the run.
+- **GameTables are a separate data source and the DB2 pipeline cannot see
+  them.** 42 tab-separated `.txt` files under `GameTables/` in CASC, holding
+  the per-level curves the client interpolates at runtime — `xp.txt`,
+  `NpcTotalHp*.txt`, `CombatRatings.txt`, `SpellScaling.txt` and so on.
+
+  They have **no DBD definition**, so `/listfile/db2s` — which enumerates
+  definitions — can never list one, and `extract_db2.py` can never reach them.
+  WTL has a `GameTableProvider` internally but **exposes no HTTP route** for
+  it (checked `Controllers/`; there is none). They are ordinary CASC files, so
+  `/casc/fdid` serves them verbatim, which is what `extract_gametables.py`
+  uses. Discovery is from `files.csv`, so `inventory.py` must run first.
+
+  Output is `out/<build>/gametables/*.txt`, raw TSV byte-for-byte. No
+  conversion to CSV: the header row's exact spelling is how the client names
+  the columns, and diffing them as text is the point. 284 KB, ~2s per build,
+  identical across 69876/69893/69913.
+
+  **`SpellScaling.txt` is where class spell scaling would live.** The DB2
+  named `SpellScaling` ships **204-empty** in this build, so nothing links a
+  spell to a scaling class, and in the GameTable **every class column is zero
+  across all 123 levels** — Rogue through Evoker, including Warrior — while
+  `Item`, `Consumable`, `Gem1–3`, `Health`, `DamageReplaceStat`,
+  `DamageSecondary` and `Mana Consumable` all carry data. The infrastructure
+  is present and unpopulated. A scaling question cannot be answered without
+  checking both, and before 2026-09-20 neither was being extracted.
 
 ---
 
@@ -637,6 +711,8 @@ apply to the libraries.
 │   ├── fetch_builds.py      # poll version endpoint, update builds.json
 │   ├── extract_db2.py       # WTL HTTP -> CSV per table, plain + hotfixed
 │   ├── inventory.py         # file listing + magic-byte classification
+│   ├── extract_gametables.py# GameTables/*.txt -- NOT DB2s, see Key facts
+│   ├── enrich.py            # ID -> human-readable context, for the reports
 │   └── diff_builds.py       # compare two build dirs, emit markdown
 ├── out/                     # GITIGNORED — extracted data
 │   └── <version>.<build>/
@@ -644,6 +720,7 @@ apply to the libraries.
 │       ├── db2_hotfixed/*.csv  # same tables with the hotfix overlay applied
 │       ├── hotfixes.csv        # push IDs + changed rows from Cache/ADB/enUS
 │       ├── files.csv           # fdid, path, size, encrypted, content_type
+│       ├── gametables/*.txt    # tab-separated, NOT DB2s — see Key facts
 │       └── manifest.json       # row counts, layouthashes, metrics
 ├── reports/                 # COMMITTED — diff output
 │   └── <from>_to_<to>.md
@@ -762,6 +839,34 @@ regions but `cn` can lag or diverge.
   the symptom" and "is my explanation of the symptom correct" are different
   experiments. Here the second one cost a single request — sampling
   `availableInBuild` over 20,000 rows and finding every value `true`.
+- **An unscanned zero is not a clean result.** A detector that could not read
+  the data returns exactly what a detector that read it and found nothing
+  returns. Before reporting "0 findings", establish that something was
+  actually capable of firing — and report coverage next to the count so a
+  reader can tell the two apart without going to the source.
+
+  Measured 2026-09-20. `contamination.py` has three rules, and two are pinned
+  to a single table by name: `light_absent_map` to `Light`, `orphan_removal`
+  to `Item` *and* to removed rows. The third, `dangling_map_ref`, only reads
+  columns named `instance_id`, `instanceid`, `continentid`, `mapid` or
+  `map_id`. Submitting the six 461xxx Thunder Clap rows — 72 rows across 11
+  spell tables — produced **0 findings and 0 applicable rules**. No spell
+  table carries a map-reference column, so nothing was ever read. The same
+  applies to the first real build diff: `Cfg_GameRules` and
+  `Cfg_SuperDistrict` are also unreadable by every rule.
+
+  `scan()` now returns `(findings, ref, coverage)` with a verdict of
+  `scanned`, `not_scanned` or `no_data`, and both diff scripts render
+  **NOT SCANNED — this is not a clean result** with a per-rule reason table
+  instead of "no suspected retail contamination". When rules *did* run, the
+  report names which ones and which were never applicable, so even a genuine
+  zero states its own scope.
+
+  This is the same class as the encrypted-count detector (finding #6) passing
+  on three builds whose file sets were byte-identical: a pass on data that
+  could not have produced a failure is not evidence. The generalisation:
+  **a detector's output is only meaningful once you have shown the detector
+  could have said otherwise.**
 - **Diffs are the deliverable.** Raw extraction is a means to an end; the
   markdown reports are what this project produces.
 - **Extract every table twice: with and without the hotfix overlay.** Plain
@@ -858,7 +963,9 @@ regions but `cn` can lag or diverge.
    though step 4 refreshed them on disk. With a local `definitionDir` this
    only reloads and clears; it downloads nothing.
 7. Extract DBCs for the new build via the builds page.
-8. Run `inventory.py` and `extract_db2.py`.
+8. Run `extract_db2.py`, then `inventory.py`, then `extract_gametables.py`
+   (in that order — GameTable discovery reads `files.csv`). `patchday.py`
+   step 8 does all three.
 9. Diff against the previous Forever build.
 10. Commit `builds.json` and the new report.
 
