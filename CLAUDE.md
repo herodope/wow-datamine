@@ -591,14 +591,30 @@ all — it is restating that the build did not change.
   summing to 5,035 could become 3,300 / 1,735 with the total unchanged, and a
   total-only check reports `MATCH` through a real key release.
 
-**Change needed either way:** `inventory.py` should report whether the file set
-changed **alongside** the encrypted count, so a passing result cannot be read
-as a measurement when it isn't. The identical-inventory warning already
-computes the hash needed for this; the two should be reported together rather
-than as unrelated lines. The 5035 baseline should also stop being a magic
-number in the script — it belongs with the other per-build baselines, or it
-should be read from the previous build's manifest so it tracks reality instead
-of a constant frozen at 1.60.1.69913.
+**Implemented 2026-09-20.** `inventory.py` now:
+
+- takes the baseline from the **previous extracted build's manifest**
+  (`previous_build()` / `baseline_from()`), not a constant. The comparison is
+  now "did this move since last time" rather than "does this still equal a
+  number someone typed in September".
+- reports the **file-set delta alongside** the encrypted count, hashing the
+  sorted FDID set rather than the whole file — a rename or a retype changes
+  the file without changing the set, and the set is what the question needs.
+- compares the `EncryptedUnknownKey` / `EncryptedButNot` split against the
+  previous build per status, so the two cannot move in opposite directions and
+  cancel unnoticed.
+- prints, when the file set did not move:
+
+  > NOTE: the encrypted-file count above is NOT a measurement this run.
+  > The file set did not move, so the count could not have moved either.
+
+  and records `encrypted_result_is_measurement` in the manifest so a report
+  can render the distinction without re-deriving it.
+
+At 1.60.1.69913 this correctly reads: `encrypted 5,035 (vs 5,035 in
+1.60.1.69893: MATCH)`, `file set unchanged`, followed by the NOTE. **The
+detector is still untested** — that does not change until a build arrives whose
+file set actually moves. 1.60.2 remains the first real test.
 
 ### 7. A parallel Thunder Clap rank ladder at modern IDs
 

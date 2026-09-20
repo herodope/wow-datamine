@@ -225,6 +225,68 @@ def merge_manifest(path, section):
         raise
 
 
+def previous_build(build):
+    """The newest extracted Forever build older than `build`, or None.
+
+    The encrypted-file baseline comes from here rather than a constant in the
+    source. A hardcoded 5035 tracks 1.60.1.69913 forever; reading the previous
+    build's manifest tracks reality, and makes the comparison mean "did this
+    move since last time" instead of "does this still equal a number someone
+    typed in September".
+    """
+    try:
+        mine = int(build.split(".")[-1])
+    except (ValueError, IndexError):
+        return None
+    candidates = []
+    if config.OUT_DIR.is_dir():
+        for d in config.OUT_DIR.iterdir():
+            if not d.is_dir() or d.name == build:
+                continue
+            parts = d.name.rsplit(".", 1)
+            if len(parts) != 2 or not parts[1].isdigit():
+                continue
+            bid = int(parts[1])
+            if bid < mine and config.is_forever_build(d.name, bid) \
+                    and (d / "manifest.json").exists():
+                candidates.append((bid, d.name))
+    return max(candidates)[1] if candidates else None
+
+
+def baseline_from(build):
+    """(encrypted, by_status, fdids_sha) from a build's manifest, or Nones."""
+    if not build:
+        return None, None, None
+    path = config.build_out_dir(build) / "manifest.json"
+    try:
+        inv = json.loads(path.read_text(encoding="utf-8")).get("inventory", {})
+    except (OSError, json.JSONDecodeError):
+        return None, None, None
+    return inv.get("encrypted"), inv.get("encrypted_by_status"), inv.get("fdid_set_sha")
+
+
+def fdid_set_sha(csv_path):
+    """SHA-256 over the sorted FDID set alone.
+
+    Deliberately not the whole-file hash: a file can be renamed or retyped
+    without the SET of files in the build changing, and the question the
+    encrypted count needs answered is specifically "did the file set move".
+    """
+    import hashlib
+    ids = []
+    with open(csv_path, "r", encoding="utf-8", errors="replace", newline="") as fh:
+        reader = csv.reader(fh)
+        next(reader, None)
+        for row in reader:
+            if row:
+                ids.append(row[0])
+    h = hashlib.sha256()
+    for i in sorted(ids, key=lambda v: int(v) if v.isdigit() else 0):
+        h.update(i.encode("ascii", "ignore"))
+        h.update(b",")
+    return h.hexdigest(), len(ids)
+
+
 def check_distinct_inventories(csv_path, build):
     """Warn when another build's files.csv is byte-identical to this one.
 
@@ -468,6 +530,23 @@ def main(argv=None):
         log("no unclassified files -- magic-byte pass has nothing to do")
 
     encrypted_total = sum(enc_counts.values())
+
+    # Baseline from the previous extracted build, not a constant in this file.
+    prev_build = previous_build(build)
+    prev_encrypted, prev_by_status, prev_fdid_sha = baseline_from(prev_build)
+    my_fdid_sha, my_count = fdid_set_sha(csv_path)
+    prev_count = None
+    if prev_fdid_sha is None and prev_build:
+        # An older manifest predates fdid_set_sha; recompute from its CSV.
+        prev_csv = config.build_out_dir(prev_build) / "files.csv"
+        if prev_csv.exists():
+            prev_fdid_sha, prev_count = fdid_set_sha(prev_csv)
+    elif prev_build:
+        prev_csv = config.build_out_dir(prev_build) / "files.csv"
+        if prev_csv.exists():
+            _s, prev_count = fdid_set_sha(prev_csv)
+    fdid_changed = None if prev_fdid_sha is None else (prev_fdid_sha != my_fdid_sha)
+
     section = {
         "generatedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "durationSeconds": round(time.monotonic() - started, 1),
@@ -478,8 +557,13 @@ def main(argv=None):
         "files_without_name_method": "counted empty values in the filename column",
         "rows_written": written,
         "encrypted": encrypted_total,
-        "encrypted_baseline": 5035,
-        "encrypted_matches_baseline": encrypted_total == 5035,
+        "encrypted_baseline": prev_encrypted,
+        "encrypted_baseline_from": prev_build,
+        "encrypted_matches_baseline": (prev_encrypted is not None
+                                       and encrypted_total == prev_encrypted),
+        "fdid_set_sha": my_fdid_sha,
+        "fdid_set_changed": fdid_changed,
+        "encrypted_result_is_measurement": fdid_changed is True,
         "encrypted_by_status": enc_counts,
         "magic_classified": len(resolved),
         "still_unclassified": len(unk_fdids) - len(resolved),
@@ -492,9 +576,33 @@ def main(argv=None):
     log(f"  rows written        {written:,}  (in this build)")
     log(f"  skipped             {skipped_not_in_build:,}  (in the listfile, not in this build)")
     log(f"  without a name      {without_name:,}")
-    log(f"  encrypted           {encrypted_total:,} (baseline 5035: {'MATCH' if encrypted_total == 5035 else 'DIFFERS'})")
+    # Finding #6: the encrypted count is only a measurement if the file set
+    # actually moved. Reporting MATCH on an unchanged file set restates that
+    # the build did not change -- it says nothing about encryption.
+    if prev_encrypted is None:
+        log(f"  encrypted           {encrypted_total:,} (no previous build to compare against)")
+    else:
+        verdict = "MATCH" if encrypted_total == prev_encrypted else "DIFFERS"
+        log(f"  encrypted           {encrypted_total:,} "
+            f"(vs {prev_encrypted:,} in {prev_build}: {verdict})")
     for k, v in sorted(enc_counts.items()):
-        log(f"    {k:22} {v:,}")
+        prev_v = (prev_by_status or {}).get(k)
+        delta = "" if prev_v is None else (
+            "  (unchanged)" if prev_v == v else f"  ({v - prev_v:+,} vs {prev_build})")
+        log(f"    {k:22} {v:,}{delta}")
+
+    if fdid_changed is None:
+        log("  file set            no previous build to compare against")
+    elif fdid_changed:
+        log(f"  file set            CHANGED vs {prev_build} "
+            f"({prev_count:,} -> {my_count:,} files)")
+    else:
+        log(f"  file set            unchanged vs {prev_build} ({my_count:,} files)")
+        log("")
+        log("  NOTE: the encrypted-file count above is NOT a measurement this run.")
+        log("  The file set did not move, so the count could not have moved either;")
+        log("  a MATCH here restates that the build is unchanged and says nothing")
+        log("  about encryption. See finding #6 in CLAUDE.md.")
     log(f"  {section['durationSeconds']}s -> {csv_path}")
 
     check_distinct_inventories(csv_path, build)
