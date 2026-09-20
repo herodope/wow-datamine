@@ -488,6 +488,41 @@ regions but `cn` can lag or diverge.
   delta. Always key on the column literally named `ID`, fall back to column 0
   only when absent, and state which key was used in the output. This applies
   to `diff_builds.py` as much as to `diff_hotfixes.py`.
+- **Never field-compare across a schema change.** Two **independent** signals
+  govern whether a positional comparison is valid, and they move separately:
+
+  | Signal | Source | Tracks |
+  |---|---|---|
+  | layouthash | the DB2 header (`manifest.json`) | the **client's** record layout |
+  | CSV header | WoWDBDefs definitions | the **definition** |
+
+  A definition update can rename or add columns with **no layouthash change** —
+  an `unk_<offset>` becoming a real name does exactly that — so checking the
+  layouthash alone is not enough. Two gates:
+
+  - `fields_comparable` requires **neither** to have changed.
+  - `rows_comparable` requires neither the **layouthash** nor the **column
+    count** to have changed.
+
+  The gates differ because a column **renamed in place** keeps every value in
+  its position: row-level change detection survives, while field names become
+  ambiguous. A layout change or a column insert invalidates both — a positional
+  diff then reports every row as changed and every field as different, which is
+  noise dressed up as signal.
+
+  **Critically: a table with a schema change must stay in the report even when
+  its magnitude is zero.** Suppressed field diffs leave added/removed/changed
+  all at 0, and a "skip anything with magnitude 0" rule then silently drops the
+  tables that most need flagging. This was a real bug in `diff_builds.py`,
+  caught only because the test fixture included a schema change with no row
+  changes. Report the change in the summary, in a dedicated section, and in the
+  table's own section, stating which comparisons were suppressed and why.
+
+  `diff_hotfixes.py` does **not** have this guard. It compares two exports of
+  the same build, so the schema is normally identical on both sides — but if
+  definitions shift mid-build (a `sync_refs.py` run plus `/dbc/updateDefs`
+  between the two extractions), the same trap applies and the guard should be
+  added there too.
 - **Treat push IDs of `2^24 + recordID` as synthetic.** Not every push ID in
   the hotfix table is a real push. IDs equal to `16777216 + recordID` are
   derived arithmetically from the record ID by a bulk-injection path, and

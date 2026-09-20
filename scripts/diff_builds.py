@@ -28,6 +28,7 @@ Usage:
 import argparse
 import csv
 import hashlib
+import json
 import sys
 from datetime import datetime, timezone
 
@@ -62,7 +63,26 @@ def file_hash(path):
 # --- Table diffing ----------------------------------------------------------
 
 
-def diff_table(table, old_dir, new_dir, max_field_rows):
+def load_layouthashes(build):
+    """table -> layouthash, from that build's manifest.json.
+
+    The layouthash comes from the DB2 header itself, so it tracks the *client's*
+    record layout. The CSV header comes from WoWDBDefs, so it tracks the
+    *definition*. They move independently, and either moving invalidates a
+    positional field-by-field comparison.
+    """
+    path = config.build_out_dir(build) / "manifest.json"
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        log(f"  warning: {path} unreadable; layouthash checks disabled for {build}")
+        return {}
+    return {k: v.get("layouthash") for k, v in data.get("tables", {}).items() if v.get("layouthash")}
+
+
+def diff_table(table, old_dir, new_dir, max_field_rows, lh_old=None, lh_new=None):
     """Compare one table across builds. Returns None if byte-identical."""
     old_path, new_path = old_dir / f"{table}.csv", new_dir / f"{table}.csv"
     h_old, h_new = file_hash(old_path), file_hash(new_path)
@@ -91,27 +111,67 @@ def diff_table(table, old_dir, new_dir, max_field_rows):
     added = sorted(set(new) - set(old), key=sort_key)
     removed = sorted(set(old) - set(new), key=sort_key)
 
-    fields_comparable = header_old is not None and header_old == header_new
+    # --- schema-change gating -------------------------------------------------
+    # Never field-compare across a layout change: the columns a value sits in
+    # may have moved, so a positional diff reports every row as changed and
+    # every field as different. Two independent signals, either one fatal:
+    #   layouthash differs  -> the client's record layout changed
+    #   CSV header differs  -> the WoWDBDefs definition changed
+    # A definition update can rename or add columns with no layouthash change
+    # (unk_<offset> becoming a real name), so the header check is not redundant.
+    layout_changed = bool(lh_old and lh_new and lh_old != lh_new)
+    header_changed = header_old is not None and header_new is not None and header_old != header_new
+    column_count_changed = (
+        header_old is not None and header_new is not None and len(header_old) != len(header_new)
+    )
+
+    reasons = []
+    if layout_changed:
+        reasons.append(f"layouthash {lh_old} → {lh_new}")
+    if column_count_changed:
+        reasons.append(f"column count {len(header_old)} → {len(header_new)}")
+    elif header_changed:
+        renamed = [(a, b) for a, b in zip(header_old, header_new) if a != b]
+        reasons.append(
+            f"{len(renamed)} column(s) renamed in the definition"
+            + (f" (e.g. {renamed[0][0]} → {renamed[0][1]})" if renamed else "")
+        )
+
+    fields_comparable = not layout_changed and not header_changed
+    # Positional row equality is only meaningful when the columns line up. A
+    # rename with identical positions keeps values in place, so row-level
+    # comparison survives that; a layout or column-count change does not.
+    rows_comparable = not layout_changed and not column_count_changed
+
     changed = []
-    for key in set(old) & set(new):
-        if old[key] != new[key]:
-            deltas = []
-            if fields_comparable and len(changed) < max_field_rows:
-                for i, name in enumerate(header_new):
-                    before = old[key][i] if i < len(old[key]) else ""
-                    after = new[key][i] if i < len(new[key]) else ""
-                    if before != after:
-                        deltas.append((name, before, after))
-            changed.append((key, deltas))
-    changed.sort(key=lambda kv: sort_key(kv[0]))
+    if rows_comparable:
+        for key in set(old) & set(new):
+            if old[key] != new[key]:
+                deltas = []
+                if fields_comparable and len(changed) < max_field_rows:
+                    for i, name in enumerate(header_new):
+                        before = old[key][i] if i < len(old[key]) else ""
+                        after = new[key][i] if i < len(new[key]) else ""
+                        if before != after:
+                            deltas.append((name, before, after))
+                changed.append((key, deltas))
+        changed.sort(key=lambda kv: sort_key(kv[0]))
 
     return {
         "table": table,
         "header": header_new or header_old,
         "key_column": key_col,
         "only_in": only_in,
-        "header_changed": (header_old is not None and header_new is not None and header_old != header_new),
-        "columns_added": [c for c in (header_new or []) if c not in (header_old or [])] if fields_comparable is False else [],
+        "layouthash_old": lh_old,
+        "layouthash_new": lh_new,
+        "layout_changed": layout_changed,
+        "header_changed": header_changed,
+        "schema_changed": layout_changed or header_changed,
+        "schema_reasons": reasons,
+        "fields_comparable": fields_comparable,
+        "rows_comparable": rows_comparable,
+        "columns_added": [c for c in (header_new or []) if c not in (header_old or [])],
+        "columns_removed": [c for c in (header_old or []) if c not in (header_new or [])],
         "rows_old": len(old),
         "rows_new": len(new),
         "added": added,
@@ -246,6 +306,51 @@ def render_files(fd):
     return L
 
 
+def _col_summary(names, sign):
+    if not names:
+        return ""
+    shown = ", ".join(f"`{c}`" for c in names[:3])
+    return f"{sign}{shown}" + ("…" if len(names) > 3 else "")
+
+
+def render_schema_changes(results):
+    """Tables whose schema moved. Prominent, because it limits what the rest of
+    the report is allowed to claim."""
+    hits = [r for r in results if r.get("schema_changed")]
+    L = ["## Schema changes", ""]
+    if not hits:
+        L += [
+            "No layouthash or column changes. Field-level diffs below are valid for "
+            "every table.",
+            "", "---", "",
+        ]
+        return L
+
+    L.append(
+        f"⚠️ **{len(hits)} table(s) changed schema between these builds, and "
+        "field-level comparison is suppressed for them.** When columns move, a "
+        "positional diff reports every row as changed and every field as different "
+        "— noise, not signal. Row-level added/removed is still reported where it "
+        "stays meaningful."
+    )
+    L.append("")
+    L.append("| Table | Reason | Field diffs | Changed rows | Columns |")
+    L.append("|---|---|---|---|---|")
+    for r in hits:
+        cols = " / ".join(
+            x for x in (_col_summary(r.get("columns_added"), "+"),
+                        _col_summary(r.get("columns_removed"), "−")) if x
+        )
+        changed_cell = "suppressed" if not r["rows_comparable"] else f"{len(r['changed']):,}"
+        L.append(
+            f"| `{r['table']}` | {'; '.join(r['schema_reasons']) or 'schema differs'} | "
+            f"{'ok' if r['fields_comparable'] else 'suppressed'} | {changed_cell} | "
+            f"{cols or '—'} |"
+        )
+    L += ["", "---", ""]
+    return L
+
+
 def render_table_section(r, max_rows):
     t = r["table"]
     L = [f"## {t}", ""]
@@ -255,10 +360,17 @@ def render_table_section(r, max_rows):
     elif r["only_in"] == "old":
         L.append("**Table removed** — not present in the new build.")
         L.append("")
-    if r["header_changed"]:
+    if r.get("schema_changed"):
+        detail = (
+            "Row-level changed detection is also suppressed: the columns no longer line "
+            "up positionally, so added/removed rows below are the only valid row-level "
+            "output."
+            if not r["rows_comparable"] else
+            "Row-level comparison still applies, since the columns line up."
+        )
         L.append(
-            "> Columns changed between builds, so per-field comparison is unavailable. "
-            "A layouthash change usually means the DBD definition moved on."
+            "> ⚠️ **Schema changed — field-level diffs suppressed for this "
+            f"table.** {'; '.join(r['schema_reasons'])}. {detail}"
         )
         L.append("")
     L.append(
@@ -338,6 +450,7 @@ def render(old_build, new_build, results, findings, fd, unchanged_count, max_row
 
     L += render_encryption(fd)
     L += render_files(fd)
+    L += render_schema_changes(results)
     L += contamination.render_markdown(findings)
 
     L.append("## Summary")
@@ -351,12 +464,18 @@ def render(old_build, new_build, results, findings, fd, unchanged_count, max_row
         elif r["only_in"] == "old":
             note = " *(removed)*"
         star = " ⭐" if r["table"] in HIGH_SIGNAL else ""
+        if r.get("schema_changed"):
+            note += " ⚠️"
         L.append(
             f"| `{r['table']}`{note}{star} | {len(r['added']):,} | {len(r['removed']):,} | "
             f"{len(r['changed']):,} | {r['rows_old']:,} → {r['rows_new']:,} |"
         )
     L.append("")
-    L.append(f"⭐ = high-signal table, detailed below. {unchanged_count:,} table(s) were byte-identical and are omitted.")
+    L.append(
+        f"⭐ = high-signal table, detailed below. ⚠️ = schema changed, "
+        f"field diffs suppressed. {unchanged_count:,} table(s) were byte-identical "
+        f"and are omitted."
+    )
     L.append("")
     L.append("---")
     L.append("")
@@ -416,20 +535,31 @@ def main(argv=None):
     global HIGH_SIGNAL
     HIGH_SIGNAL = HIGH_SIGNAL + [t for t in args.detail if t not in HIGH_SIGNAL]
 
+    lh_old = load_layouthashes(args.from_build)
+    lh_new = load_layouthashes(args.to_build)
+    if not lh_old or not lh_new:
+        log("  warning: layouthashes unavailable for at least one build; relying on "
+            "CSV headers alone to detect schema changes")
+
     tables = sorted({p.stem for p in old_dir.glob("*.csv")} | {p.stem for p in new_dir.glob("*.csv")})
     log(f"{len(tables)} table(s) across both builds")
 
     results, unchanged = [], 0
     for t in tables:
-        r = diff_table(t, old_dir, new_dir, args.max_rows)
+        r = diff_table(t, old_dir, new_dir, args.max_rows, lh_old.get(t), lh_new.get(t))
         if r is None:
             unchanged += 1
             continue
-        if r["magnitude"] == 0 and not r["only_in"]:
+        # A schema change must never be collapsed into "unchanged". A table can
+        # move its columns with no row differences at all -- suppressed field
+        # diffs leave magnitude at 0 -- and dropping it here would hide exactly
+        # the thing that invalidates comparison.
+        if r["magnitude"] == 0 and not r["only_in"] and not r["schema_changed"]:
             unchanged += 1
             continue
         results.append(r)
-        log(f"  {t}: +{len(r['added'])} -{len(r['removed'])} ~{len(r['changed'])}")
+        flag = " [SCHEMA CHANGED - field diffs suppressed]" if r["schema_changed"] else ""
+        log(f"  {t}: +{len(r['added'])} -{len(r['removed'])} ~{len(r['changed'])}{flag}")
 
     log(f"  {len(results)} changed, {unchanged} unchanged")
 
