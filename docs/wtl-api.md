@@ -60,6 +60,23 @@ from `Cache/ADB/enUS` on top of the shipped DB2.
 > | `&hotfixes=true` | 6,622 | **byte-identical to plain — silently ignored** |
 >
 > A 59% row difference, with HTTP 200 and no warning in either case.
+>
+> WTL's console proves it server-side. The DBC cache key includes the hotfix
+> flag, and WTL logs which variant it loads. Across those three requests it
+> logged only **two** loads:
+>
+> ```
+> Exporting DBC itemsearchname as CSV ...
+> DBC itemsearchname for build 1.60.1.69913 (hotfixes: False) is not cached, loading!
+> Exporting DBC itemsearchname as CSV ...
+> DBC itemsearchname for build 1.60.1.69913 (hotfixes: True) is not cached, loading!
+> Exporting DBC itemsearchname as CSV ...      <- hotfixes=true, no load
+> ```
+>
+> The third request (`&hotfixes=true`) logged no load at all: it was served
+> from the **`hotfixes: False`** cache entry. The parameter bound nothing.
+> `(hotfixes: False|True)` in WTL's log is the reliable way to confirm which
+> variant a script actually requested.
 
 ### DataTables envelopes — there are two
 
@@ -377,10 +394,11 @@ Pulls DBCache files from Raidbots. Returns 200 with an empty body.
 
 ## Cache management (patch day)
 
-### `GET /dbc/updateDefs`
+### `GET /dbc/updateDefs` ✅ confirmed
 
 Reloads the DBD manifest and definitions, then clears both the DBC cache and
-the hotfix cache. Returns `"Reloaded <n> definitions and cleared DBC cache!"`.
+the hotfix cache. Returns `"Reloaded <n> definitions and cleared DBC cache!"`
+as `text/plain`.
 
 This backs the **"Update WoWDBDefs & clear cache"** button. With a local
 `definitionDir` — which is our setup — `UpdateDefsController.cs:19` logs
@@ -388,6 +406,59 @@ This backs the **"Update WoWDBDefs & clear cache"** button. With a local
 done through WTL itself"* and skips the download. The reload-and-clear half
 still runs, and that is the half we need after `sync_refs.py` has refreshed the
 clone on disk.
+
+**Observed** (2026-09-19, build `1.60.1.69913`):
+
+```
+$ curl -s http://localhost:5080/dbc/updateDefs
+Reloaded 1342 definitions and cleared DBC cache!
+[HTTP 200, 0.56s, text/plain; charset=utf-8]
+```
+
+WTL's console for the same call:
+
+```
+WARNING: You are using a local DBD definitions directory, updating can not be
+done through WTL itself.
+Reloading definitions from directory A:\...\vendor\WoWDBDefs\definitions
+Loaded 1342 definitions from definitions folder!
+Loaded 531 relations and 12 label columns
+```
+
+The skip-download warning fires as expected, and definitions are reloaded from
+our local clone rather than fetched. The relations/label-column counts match
+CLAUDE.md's baseline metrics (531 / 12), so the reload reproduced the same
+state.
+
+Return string matches the source exactly. The count is **1342** — it comes from
+`Directory.EnumerateFiles(definitionsDir)` in `DBDProvider.LoadDefinitions`,
+which counts **every** file in the directory, not just `.dbd`. Our clone happens
+to contain 1342 files, all of them `.dbd`, so the two agree here; a stray file
+dropped into `definitions/` would inflate this number.
+
+**What it clears, and what it does not.** `DBCManager.ClearCache()` disposes and
+recreates an in-memory `MemoryCache` (`DBCManager.cs:20`, SizeLimit 250) keyed
+by `(name, build, useHotfixes, locale)`, and rebuilds the `DBCD` instance.
+Nothing on disk is touched — it does not read or write `dbcFolder`.
+
+Verified by before/after around the call:
+
+| Check | Before | After |
+|---|---|---|
+| `/listfile/db2s?build=…` | 1161 | 1161 |
+| `/dbc/info?build=…` rows | 1161 | 1161 |
+| `dbcs/1.60.1.69913/dbfilesclient/` | 1161 `.db2` files | 1161 `.db2` files |
+| `/dbc/export` `itemsearchname` hotfixed | 10,556 rows | 10,556 rows |
+
+**No re-extraction is needed after calling this.** The next request for a table
+re-parses it from the existing on-disk DB2 and repopulates the cache; the only
+cost is losing warm cache entries, so the first query per table is slower.
+
+The cache clear is real, not just claimed by the return string: the
+post-call export of `itemsearchname` logged
+`(hotfixes: True) is not cached, loading!` even though that exact variant had
+been served minutes earlier — the entry was gone and was rebuilt from the
+on-disk DB2.
 
 ### `GET /dbc/reloadDefs`
 
@@ -436,6 +507,7 @@ Checked against a live WTL on `http://localhost:5080`, build `1.60.1.69913`,
 | `POST /build/table` | 1 local build, 9 elements, order as documented |
 | `GET /build/table` | 405, as expected from `[HttpPost]` |
 | `GET /listfile/info?filedataid=…` | bare string filename |
+| `GET /dbc/updateDefs` | `Reloaded 1342 definitions and cleared DBC cache!`, 0.56s; on-disk DB2s unaffected |
 
 ### Discrepancies found
 
@@ -462,6 +534,10 @@ Checked against a live WTL on `http://localhost:5080`, build `1.60.1.69913`,
 
 `/dbc/export/all`, `/dbc/export/alltodisk`, `/dbc/export/db2`,
 `/casc/fdid`, `/casc/moreinfo`, `/build/list`,
-`/dbc/hotfixes/downloadLatest`, and the three cache-management routes. Their
-signatures are read from source but not exercised — the cache and download
-routes mutate WTL state, so they were left alone while it was serving.
+`/dbc/hotfixes/downloadLatest`, `/dbc/reloadDefs` and `/dbc/reloadHotfixes`.
+Their signatures are read from source but not exercised — the remaining cache
+and download routes mutate WTL state, so they were left alone while it was
+serving.
+
+`/dbc/updateDefs` **was** exercised (see above) after confirming from source
+that it only clears in-memory caches.
