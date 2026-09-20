@@ -181,6 +181,48 @@ against a live instance on 1.60.1.69913.
   local `definitionDir` it skips the download half and only does
   reload-and-clear — which is exactly the half needed after `sync_refs.py` has
   refreshed the clone on disk.
+- **Never pass `build=` to `/dbc/meta/getMappings` or `/dbc/meta/getMeta` on a
+  1.60.x build.** The entry filter runs through `BuildRange.Contains`, which
+  compares **componentwise** rather than lexicographically:
+  `major >= min.major && major <= max.major`. Forever is `1.60.1.69913`, so
+  `major = 60` fails `<= 12` against the `Vanilla` preset, and `expansion = 1`
+  fails `>= 2` against every TBC-and-later preset. **A 1.60.x build matches no
+  preset range that exists**, so the parameter can only ever subtract. The
+  stripped entries come back as `entries: []`, which reads as "this column has
+  no enum mapping" rather than "you passed the wrong parameter" — the same
+  silent-wrongness shape as `hotfixes=` vs `useHotfixes=`. Measured: with
+  `build=` set, `WeatherType` loses **all six** of its entries and
+  `SpellEffect` loses `146 ACTIVATE_RUNE`. Omit `build` and filter nothing.
+- **`output=png` on `/map/tile` is read only inside the `type == "adt"`
+  branch.** Every BLP falls through to the tail path, which unconditionally
+  returns `application/octet-stream` holding raw RGBA bytes — `targetSize ×
+  targetSize × 4`, no header — with a **200**. Requesting a PNG minimap tile
+  succeeds and yields something no image decoder will open. Use
+  `/casc/blp2png` for a PNG; use `/map/tile` only for pixels to composite.
+- **A 500 from WTL usually means bad input, not a dead server.**
+  `Startup.cs` registers `UseDeveloperExceptionPage` only under
+  `IsDevelopment()`, so a Release build has **no exception handler at all** and
+  an unhandled throw returns a bare 500 with an empty body, the reason going
+  only to WTL's console. `/casc/blp2png` on a non-BLP, `/dbc/tooltip/item` on a
+  `RandPropPoints` miss or unknown `SubclassID`, `/map/wdtMask` on an unknown
+  layer and `/map/download?layer=5` all reach it. Scripts must treat 500 as
+  possible bad input and keep going, not as "WTL is down" — probe
+  `/casc/buildname` to tell the two apart.
+- **`/casc/blp2png` 404s on encrypted files.** It reads the first four bytes
+  and returns `NotFound()` when all four are zero, which is exactly what a
+  file with a missing key decodes to. A 404 there means *unavailable*, not
+  *absent* — cross-check the `encryptionStatus` column on `/listfile/files`
+  before reporting a texture as missing from the build.
+- **The tooltip controller is non-hotfixed and cannot be pointed at another
+  build.** Every load is the two-argument `GetOrLoad(name, CASC.BuildName)`,
+  i.e. `useHotfixes: false`, with no parameter to change it.
+  (`FindRecords(…, true)` looks like a hotfix flag but that fifth argument is
+  `single`.) So `/dbc/tooltip/item/<id>` on any of the hotfix-only `ItemSparse`
+  additions falls through both `ItemSparse` and `ItemSearchName` and returns
+  `Name: "Unknown Item"`, `HasSparse: false` — a plausible-looking answer for
+  an item that exists. Anything hotfix-only must be read through
+  `/dbc/export`, `/dbc/data`, `/dbc/peek` or `/dbc/find` with
+  `useHotfixes=true`.
 
 ---
 
@@ -330,7 +372,7 @@ again means it is still being staged. Also watch whether the ladder grows —
 the vanilla honor system has 14 ranks per faction, so an incomplete set now
 implies more to come.
 
-### 4. LightData column 055 — UNCONFIRMED, do not assert
+### 4. LightData column 055 — LEANING FALSIFIED, do not assert
 
 Twelve `LightData` rows (74945–74956, `LightParamID` 7742, Kalimdor) covering
 the complete day cycle each changed `Field_1_60_1_69876_055` from `0` to
@@ -342,9 +384,35 @@ as fact.** The column is unnamed in WoWDBDefs for this build, and per the
 conventions above an unknown column's meaning is never asserted in committed
 output.
 
-**Watch:** whether WoWDBDefs names the column in a later definition sync. Only
-then does the interpretation become reportable. If named as something other
-than a colour, discard the reading entirely.
+**Evidence against it, added 2026-09-20.** WoWDBDefs' `meta/mapping.dbdm`
+marks 23 `LightData` columns as `COLOR`, and `Field_1_60_1_69876_055` is not
+among them. On its own that would be weak — the meta tree might simply not
+cover unnamed columns. It does: four of the 44 `COLOR` mappings are on
+**unnamed columns in this very build**, under the same generated naming
+scheme —
+
+```
+COLOR LightDataGlobalVolumeFog::Field_1_60_1_69876_001
+COLOR LightDataGlobalVolumeFog::Field_1_60_1_69876_002
+COLOR LightDataGlobalVolumeFog::Field_1_60_1_69876_003
+COLOR LightDataGlobalVolumeFog::Field_1_60_1_69876_004
+```
+
+So contributors have gone through Forever's unnamed light columns and tagged
+the ones they read as colours, and did not tag this one. That is a negative
+signal, not merely absence of evidence — hence **leaning falsified**. It is
+not conclusive: the four tagged columns are in a different table, and nobody
+may have worked through `LightData`'s unnamed columns at all.
+
+**The gate is unchanged.** The reading becomes reportable only if WoWDBDefs
+names the column as a colour in a later definition sync — the meta mapping
+does not make it reportable now, and the absence does not make it refutable in
+committed output either. If named as something other than a colour, discard
+the reading entirely.
+
+**Watch:** whether a definition sync names `LightData::Field_1_60_1_69876_055`,
+and whether `mapping.dbdm` gains a `COLOR` entry for it. Re-check both after
+every `sync_refs.py` run.
 
 ### 5. Three open retail-contamination cases
 
