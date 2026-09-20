@@ -112,16 +112,71 @@ minutes.
    the only way to reach it again, and they are not recoverable after the fact.
 4. `python scripts/sync_refs.py` — refresh WoWDBDefs, the listfile and
    TACTKeys. Must precede any use of `definitionDir`.
-5. `.\scripts\run-wtl.ps1`, then extract DBCs for the new build via the builds
-   page.
-6. Run the inventory and DB2 extraction. *(`inventory.py` / `extract_db2.py`
-   are not written yet.)*
-7. Diff against the previous Forever build. *(`diff_builds.py` not written
+5. `.\scripts\run-wtl.ps1`.
+6. **Call `GET /dbc/updateDefs`** — the "Update WoWDBDefs & clear cache"
+   button. This must follow step 4: WTL caches definitions and will
+   otherwise keep using the previous build's set even though `sync_refs.py`
+   just refreshed them on disk. With a local `definitionDir` it downloads
+   nothing and only reloads and clears.
+   ```powershell
+   curl.exe -s http://localhost:5080/dbc/updateDefs
+   ```
+7. Extract DBCs for the new build via the builds page.
+8. Run the inventory and DB2 extraction. Every table is extracted **twice**,
+   plain into `db2/` and hotfix-applied into `db2_hotfixed/` — see
+   [Hotfixes vs DB2s](#hotfixes-vs-db2s). *(`inventory.py` /
+   `extract_db2.py` are not written yet.)*
+9. Diff against the previous Forever build. *(`diff_builds.py` not written
    yet.)*
-8. Commit `builds.json` and the new report.
+10. Commit `builds.json` and the new report.
 
 ⚠️ On WTL's diff page, the **Manual build** box defaults to product `wow`. It
 must be `wow_classic_beta`. Invalid config hashes crash WTL outright.
+
+---
+
+## WTL API gotchas
+
+Scripts drive WTL over HTTP. [`docs/wtl-api.md`](docs/wtl-api.md) is the full
+route reference — route, method, params and response shape, read from the
+controller source and verified live. The traps that cause **silently wrong
+output**:
+
+| Gotcha | Consequence |
+|---|---|
+| The API parameter is `useHotfixes=true`; the browse page URL spells it `hotfixes=` | Sending `hotfixes=` returns 200 with **non-hotfixed** data — 6,622 vs 10,556 rows on `itemsearchname`. Never use the page's spelling in scripts |
+| `/listfile/db2s` returns 1342 tables unfiltered, 1161 build-filtered | Iterate the filtered list or ~181 exports come back empty |
+| Two DataTables envelope shapes | `/dbc/info` and `/dbc/data` have an `error` key; `/dbc/hotfixes/list`, `/listfile/files`, `/build/table` do not — `d["error"]` raises `KeyError` |
+| `204` vs `404` | 204 = table defined but zero rows in this build; 404 = not in this build. Handle distinctly |
+| `/dbc/hotfixes/list` with no query string | Returns all zeros, looking like "no hotfixes". Pass `?length=N` |
+| Default `locale` is `All_WoW`, not `enUS` | Pass `locale` explicitly |
+
+---
+
+## Hotfixes vs DB2s
+
+Two different sources, answering two different questions:
+
+- **DB2s** are the static tables shipped inside the build. A change here means
+  Blizzard published a new client.
+- **Hotfixes** are live tuning data pushed between client patches. WTL loads
+  them from the client's `Cache/ADB/enUS` directory and tracks push IDs.
+
+Because of this, every table is extracted twice — plain into `db2/`, and with
+the hotfix overlay applied into `db2_hotfixed/`:
+
+```
+out/<version>.<build>/
+├── db2/*.csv           plain DB2s, as shipped in the build
+├── db2_hotfixed/*.csv  same tables with the hotfix overlay applied
+├── hotfixes.csv        push IDs + changed rows from Cache/ADB/enUS
+├── files.csv           fdid, path, size, encrypted, content_type
+└── manifest.json       row counts, layouthashes, metrics
+```
+
+A value that moves only in `db2_hotfixed/` was hotfixed; one that moves in both
+shipped in the build. Collapsing the two into a single output loses that
+distinction permanently, so do not "simplify" it away.
 
 ---
 
@@ -153,6 +208,7 @@ scripts/       the pipeline
 reports/       diff output, the actual product
 CLAUDE.md      project context and locked decisions
 README.md      this file
+docs/          WTL API reference
 ```
 
 `out/` (extracted data) and `vendor/` (third-party clones) are gitignored. Both
@@ -166,9 +222,12 @@ are reproducible; `builds.json` is not.
 | `fetch_builds.py` | ✅ | Poll the version endpoint, merge Forever builds into `builds.json` |
 | `sync_refs.py` | ✅ | Clone/refresh WoWDBDefs, listfile, TACTKeys; download listfile CSV |
 | `run-wtl.ps1` | ✅ | Launch WTL from the correct working directory |
-| `extract_db2.py` | ⬜ | WTL HTTP → CSV per table |
-| `inventory.py` | ⬜ | File listing + magic-byte classification |
+| `extract_db2.py` | ⬜ | WTL HTTP → CSV per table, both plain and hotfix-applied |
+| `inventory.py` | ⬜ | File listing. Magic-byte classification is **low priority** — the listfile names 2,274,258 files for this build, so little is left unnamed |
 | `diff_builds.py` | ⬜ | Compare two build dirs, emit markdown |
+
+The WTL routes these drive are documented in
+[`docs/wtl-api.md`](docs/wtl-api.md).
 
 Both completed Python scripts are idempotent and safe to re-run.
 `fetch_builds.py` only ever adds entries to `builds.json`, never overwrites

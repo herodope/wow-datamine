@@ -115,6 +115,42 @@ dotnet run -c Release
 
 ---
 
+## WTL API gotchas
+
+Full route reference: [`docs/wtl-api.md`](docs/wtl-api.md). These are the traps
+that produce **silently wrong output** rather than an error. All measured
+against a live instance on 1.60.1.69913.
+
+- **The hotfix parameter is `useHotfixes=true` on API routes.** The browse page
+  URL spells it `hotfixes=` and rewrites it client-side before calling the API.
+  Sending `hotfixes=` to an API route binds nothing, returns **200**, and
+  silently yields non-hotfixed data — measured at **10,556 rows with
+  `useHotfixes=true` vs 6,622 without** on `itemsearchname`. **NEVER use the
+  page's spelling in scripts.** This is the failure that would fill
+  `db2_hotfixed/` with plain DB2 data and never report a problem.
+- **Iterate the build-filtered table list.** `/listfile/db2s` unfiltered returns
+  **1342** tables — everything WoWDBDefs defines. Build-filtered
+  (`?build=<version>`) returns **1161**. Use the filtered list or ~181 exports
+  come back empty.
+- **Two distinct DataTables envelope shapes exist.** `/dbc/info` and `/dbc/data`
+  carry an `error` key; `/dbc/hotfixes/list`, `/listfile/files` and
+  `/build/table` do **not** — reading `d["error"]` on those raises `KeyError`.
+  Use `.get("error")` for a single code path.
+- **204 and 404 mean different things.** `204 No Content` is
+  defined-but-zero-rows in this build (e.g. `modifiedcraftingitem`); `404` is
+  not in this build at all. Handle them distinctly — a 204 is not a failure.
+- **`/dbc/hotfixes/list` returns zeros when given no query string.** It
+  short-circuits on `!Request.QueryString.HasValue`, so a bare request looks
+  like "no hotfixes exist". Always pass `?length=N`.
+- **Default locale on DB2 routes is `All_WoW`, not `enUS`.** Pass `locale`
+  explicitly rather than relying on the default.
+- **`/dbc/updateDefs` is the "Update WoWDBDefs & clear cache" button.** With our
+  local `definitionDir` it skips the download half and only does
+  reload-and-clear — which is exactly the half needed after `sync_refs.py` has
+  refreshed the clone on disk.
+
+---
+
 ## Baseline metrics (1.60.1.69913)
 
 Track these per build; movement is signal.
@@ -265,12 +301,16 @@ regions but `cn` can lag or diverge.
    on disk first, and WTL silently falls back to the remote manifest if it
    does not.
 5. Point WTL's `definitionDir` at `vendor/WoWDBDefs/definitions`, then start
-   WTL and extract DBCs for the new build. **Press "Update WoWDBDefs & clear
-   cache" on the DBC page after `sync_refs.py`** — WTL caches definitions and
-   will keep using the stale set from the previous build otherwise.
-6. Run `inventory.py` and `extract_db2.py`.
-7. Diff against the previous Forever build.
-8. Commit `builds.json` and the new report.
+   WTL.
+6. **Call `GET /dbc/updateDefs`** (the "Update WoWDBDefs & clear cache"
+   button). This must follow `sync_refs.py` — WTL caches definitions and
+   will otherwise keep using the stale set from the previous build even
+   though step 4 refreshed them on disk. With a local `definitionDir` this
+   only reloads and clears; it downloads nothing.
+7. Extract DBCs for the new build via the builds page.
+8. Run `inventory.py` and `extract_db2.py`.
+9. Diff against the previous Forever build.
+10. Commit `builds.json` and the new report.
 
 ---
 
