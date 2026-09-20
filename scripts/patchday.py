@@ -301,6 +301,20 @@ def step9_diff(version, previous, dry):
         log(f"  previous Forever build: {previous}")
         run([SCRIPTS / "diff_builds.py", previous, version], dry, label="diff_builds.py")
         reports.append(config.report_path(previous, version))
+
+    # The HTML pages render the same data for reading rather than auditing.
+    # They run AFTER the markdown diffs, not instead of them: the markdown is
+    # the committed record, the HTML is the thing you send someone.
+    log("")
+    log("  render_patchnotes.py : the same data as readable patch notes")
+    if version:
+        run([SCRIPTS / "render_patchnotes.py", "--build", version],
+            dry, label="render_patchnotes.py (hotfix)")
+        reports.append(config.REPORTS_DIR / f"patchnotes_{version}.html")
+    if previous and version:
+        run([SCRIPTS / "render_patchnotes.py", "--from", previous, "--to", version],
+            dry, label="render_patchnotes.py (build diff)")
+        reports.append(config.REPORTS_DIR / f"patchnotes_{previous}_to_{version}.html")
     return reports
 
 

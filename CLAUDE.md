@@ -812,6 +812,7 @@ apply to the libraries.
 │   ├── inventory.py         # file listing + magic-byte classification
 │   ├── extract_gametables.py# GameTables/*.txt -- NOT DB2s, see Key facts
 │   ├── enrich.py            # ID -> human-readable context, for the reports
+│   ├── render_patchnotes.py # self-contained HTML, hotfix + build-diff modes
 │   └── diff_builds.py       # compare two build dirs, emit markdown
 ├── out/                     # GITIGNORED — extracted data
 │   └── <version>.<build>/
@@ -822,7 +823,10 @@ apply to the libraries.
 │       ├── gametables/*.txt    # tab-separated, NOT DB2s — see Key facts
 │       └── manifest.json       # row counts, layouthashes, metrics
 ├── reports/                 # COMMITTED — diff output
-│   └── <from>_to_<to>.md
+│   ├── <from>_to_<to>.md
+│   ├── hotfix_<build>.md
+│   ├── patchnotes_<build>.html          # readable, self-contained
+│   └── patchnotes_<from>_to_<to>.html
 └── vendor/                  # GITIGNORED — cloned third-party tools
 ```
 
