@@ -16,7 +16,36 @@ Outstanding:
 - [x] DBD directory configured — `definitionDir` points at
       `vendor/WoWDBDefs/definitions`, no longer the remote manifest
 - [x] `builds.json` seeded with 1.60.1.69913 (5a6cc43)
-- [ ] Only one Forever build known locally, so diffing is not yet possible
+- [ ] **Two earlier Forever builds exist and are not in `builds.json`.**
+      Measured 2026-09-20: `GET /build/list` returns **three** builds matching
+      `^1\.6\d\.`, not one —
+
+      | Version | Build | buildConfig | cdnConfig | First seen |
+      |---|---|---|---|---|
+      | 1.60.1 | 69876 | `e7fab7248766e9e7daddb3b6083c9c3c` | `272d201d5b2d6fec8fdb4aa59b2a9eea` | 2026-09-16 18:23 |
+      | 1.60.1 | 69893 | `5aa0eecfa8d49f5ad01221dbc8601144` | `c39a363b4a67449d8f16736dba987a43` | 2026-09-16 23:14 |
+      | 1.60.1 | 69913 | `6c0df97e8e481a9a41600e373367c200` | `1f946798ccc0e9281f9ac94e3539ada9` | 2026-09-18 03:02 |
+
+      **`FOREVER_MIN_BUILD_ID = 69900` rejects the first two.** They are
+      unambiguously Forever: 69876 is the build WoWDBDefs names this build's
+      unknown columns after (`Field_1_60_1_69876_055`), and the only version
+      lines on `wow_classic_beta` are 1.13, 1.60, 2.5, 3.4, 4.4 and 5.5 — so
+      `^1\.6\d\.` discriminates completely on its own and the build-ID gate
+      contributes nothing but false negatives.
+
+      Not changed unilaterally: the filter is a CRITICAL locked rule, and
+      lowering the threshold is a decision, not a fix. See the note under
+      **CRITICAL: build filtering**. Resolving this unblocks diffing, which
+      is the project's stated deliverable.
+- [ ] **`builds.json` and `/build/list` disagree on 69913's `cdnConfig`.**
+      `builds.json` has `5525ea1ce6668e895569c89c2d6a154c` (captured
+      2026-09-19 via `fetch_builds.py`); `/build/list` has
+      `1f946798ccc0e9281f9ac94e3539ada9` (WTL recorded it 2026-09-18).
+      `buildConfig` matches in both. A `cdnConfig` legitimately rotates
+      independently of the build, so two values for one build is expected
+      rather than wrong — but **only one of them was captured deliberately**,
+      and CLAUDE.md treats these hashes as unrecoverable once Blizzard rotates
+      them off the version list. Record both.
 
 ---
 
@@ -72,6 +101,23 @@ noise. `diff_builds.py` must refuse to run if either build fails this filter.
 Do **not** filter on date alone; wago.tools backfills and re-indexes older
 builds. Build IDs are globally monotonic across all Blizzard products and are
 the reliable secondary check.
+
+> **The `>= 69900` half of this rule is measurably wrong and excludes real
+> Forever builds.** ✅ measured 2026-09-20 against `/build/list`: three builds
+> match `^1\.6\d\.` — 69876, 69893 and 69913 — and the threshold rejects the
+> first two. The version lines present on `wow_classic_beta` are 1.13, 1.60,
+> 2.5, 3.4, 4.4 and 5.5, so the version pattern already discriminates
+> completely; the build-ID gate adds only false negatives, and it silently
+> discarded the two builds that would have made the first diff possible.
+>
+> The threshold was chosen as a round number below 69913 before any earlier
+> build was known to exist. The safe correction is to lower
+> `FOREVER_MIN_BUILD_ID` to **69876** — keeping a secondary check against a
+> future 1.6x collision while admitting every build actually observed — rather
+> than deleting the gate. **That is a decision for the repo owner**, and
+> `scripts/config.py` is unchanged pending it. Until then, `diff_builds.py`
+> will refuse both earlier builds, which is the documented behaviour working
+> as specified against a specification that is wrong.
 
 ---
 

@@ -238,7 +238,7 @@ bare `true`. This is the "DBCs missing, extract?" action on the builds page
 (`wwwroot/builds/index.html:359`) and the prerequisite for `/dbc/info` and for
 diffing this build later.
 
-### Raw DB2 file — `GET /dbc/export/db2` ⚠️ source-read
+### Raw DB2 file — `GET /dbc/export/db2` ✅ measured
 
 | Param | Type | Default |
 |---|---|---|
@@ -249,7 +249,7 @@ diffing this build later.
 Note the parameter is `fullBuild` here, not `build`. Serves from CASC when
 `fullBuild == CASC.BuildName`, otherwise from disk. 404 if absent.
 
-### Paged table data — `GET|POST /dbc/data/{name}` ⚠️ source-read
+### Paged table data — `GET|POST /dbc/data/{name}` ✅ measured
 
 | Param | Type | Default |
 |---|---|---|
@@ -320,7 +320,7 @@ build.
 > disk directly, and reproducing that is the only route to real sizes.
 > `inventory.py` emits an empty `size` column rather than inventing one.
 
-### Aggregate sizes — `GET /size/data` ⚠️ source-read
+### Aggregate sizes — `GET /size/data` ✅ measured — **500s on this build**
 
 | Param | Type | Default |
 |---|---|---|
@@ -332,6 +332,16 @@ build.
 
 Returns **totals per group**, never per-file rows. Listed here so it is not
 mistaken for a source of per-file sizes.
+
+> **It returns HTTP 500 on 1.60.1.69913.** ✅ measured:
+> `?groupType=filetype` throws `ArgumentOutOfRangeException` from
+> `TACTSharp.EncodingInstance.FindContentKey`, wrapped in an
+> `AggregateException`. That is the **same exception as the ten known-benign
+> FDIDs** in CLAUDE.md's baseline metrics — the route walks every file and one
+> malformed encoding entry takes the whole request down, where the analysis
+> pass logs and continues. So on this build there is no working size route at
+> all, per-file or aggregate. `inventory.py` emitting an empty `size` column
+> is not a shortcut; it is the only available answer.
 
 ### Filename by FDID — `GET /listfile/info` ✅ measured
 
@@ -355,7 +365,7 @@ them.
 Returns the file bytes as `application/octet-stream`, 404 if
 `!CASC.FileExists(fileDataID)` or the read returns null.
 
-### File detail — `GET /casc/moreinfo` ⚠️ source-read
+### File detail — `GET /casc/moreinfo` ✅ measured
 
 | Param | Type |
 |---|---|
@@ -364,6 +374,27 @@ Returns the file bytes as `application/octet-stream`, 404 if
 Returns an **HTML fragment**, not JSON — the source calls this out as legacy
 (`"generating HTML here is ugly but that's how the old system worked"`).
 Scraping it is fragile; prefer `/listfile/files` and `/listfile/info`.
+
+✅ measured: 200, 5,129 bytes for FDID 135274, served as
+**`Content-Type: text/plain`** despite the body being HTML. It is, however,
+the only route that exposes a file's **content hash** — `/casc/hashbyid` is
+broken (see below), so scraping the 32-hex string out of this fragment is
+currently the only way to get a CKey for `/casc/chash`.
+
+### Content hash by FDID — `GET /casc/hashbyid` ✅ measured — **broken**
+
+> **Returns `{}` for every input.** ✅ measured: FDID 135274 and FDID
+> 999999999 both give HTTP 200 with a literal empty object.
+>
+> The action is declared `public (string, int) HashByID(int filedataid)`
+> (`CASCController.cs:971`). `System.Text.Json` serialises a `ValueTuple` by
+> its **fields**, and field serialisation is off by default — so both members
+> vanish and the envelope is empty. The routes that return field-bearing
+> types and work, such as `/dbc/meta/getMappings` and `/map/list`, all pass
+> `IncludeFields = true` explicitly; this one does not.
+>
+> A 200 carrying `{}` is indistinguishable from "no hash for this file"
+> without reading the source. Use `/casc/moreinfo` and scrape the CKey.
 
 ---
 
@@ -406,7 +437,7 @@ capitalised, unlike the lowercase strings in `/listfile/files`).
 > rows are other games on recycled product codes — apply
 > `config.is_forever_build()` before using anything from them.
 
-### Archived builds — `GET /build/list` ⚠️ source-read
+### Archived builds — `GET /build/list` ✅ measured
 
 No parameters. Returns `SQLiteDB.GetBuilds()` as a JSON array of objects (not
 the DataTables envelope) — WTL's own record of builds it has seen.
@@ -583,7 +614,7 @@ casing works.
   exe without that variable and it is a bare 500 with an empty body. Check
   `content_type` before calling either way.
 
-### Raw file bytes — `GET /casc/fdid`, `GET /casc/chash` ⚠️ source-read
+### Raw file bytes — `GET /casc/fdid`, `GET /casc/chash` ✅ measured
 
 `/casc/fdid` is documented under **Files** above. `/casc/chash`
 (`CASCController.cs:59`) is the same thing keyed on a content hash:
@@ -600,7 +631,7 @@ Resolves CKey → EKey via `CASC.TryGetEKeysByCKey` and streams the first EKey.
 Neither route decodes anything — they hand back the file as it sits in CASC
 after BLTE. For a BLP that means BLP bytes, not an image.
 
-### Bulk extraction — `GET /casc/zip/fdids` ⚠️ source-read
+### Bulk extraction — `GET /casc/zip/fdids` ✅ measured
 
 `ZipController.cs:12`. The route is `casc/[controller]/fdids`, i.e.
 **`/casc/zip/fdids`**.
@@ -621,7 +652,7 @@ duplicate basenames collide inside the archive, and an FDID absent from
 recorded in `errors.txt` rather than named `<fdid>.unk`. The `.unk` fallback in
 the source only fires for an FDID that is *in* the map with an empty name.
 
-### Map list — `GET /map/list` ⚠️ source-read
+### Map list — `GET /map/list` ✅ measured
 
 `MapController.cs:225`. No parameters. Returns a JSON array of
 
@@ -639,7 +670,7 @@ not a numeric map id) and `wdtFileDataID` = 0. Downstream routes accept
 
 Uses `CASC.BuildName`; there is no `build` parameter.
 
-### Tile grid for a map — `GET /map/wdtMask`, `GET /map/wdtMaskPuzzle` ⚠️ source-read
+### Tile grid for a map — `GET /map/wdtMask`, `GET /map/wdtMaskPuzzle` ✅ measured
 
 `MapController.cs:636` and `:643`.
 
@@ -705,7 +736,13 @@ both other branches), and an FDID with no known type is **assumed to be BLP**.
 The BLP path picks the smallest mip still ≥ `targetSize` then resizes down, so
 `targetSize` is honoured; the ADT path renders at 128 and scales up.
 
-### Whole map as one PNG — `GET /map/download` ⚠️ source-read
+### Whole map as one PNG — `GET /map/download` ⚠️ source-read — deliberately not exercised
+
+> Left unexercised on purpose, not by omission. It is read-only, but every
+> call composes a 64 × 64 grid of 512 px tiles into a single **32768 × 32768**
+> image in memory with no crop or scale parameter. Exercising it while WTL is
+> serving an extraction risks taking the process down. Run it deliberately,
+> between runs, and record the result then.
 
 `MapController.cs:795`. Same four parameters as `wdtMask`. Returns `image/png`
 named `<mapID>.png`.
@@ -835,7 +872,7 @@ where `entries` is `[{ value, name, builds, buildRanges, comment }]` for `meta`
 > rather than "filtered out". **After every `sync_refs.py`, re-check that no
 > ENUM/FLAGS mapping returns zero entries with `build=` set.**
 
-### One column — `GET /dbc/meta/getMeta` ⚠️ source-read
+### One column — `GET /dbc/meta/getMeta` ✅ measured
 
 `MetaController.cs:74`.
 
@@ -857,6 +894,24 @@ Returns `{ metaType, entries }` or bare `null`.
   reachable through `getMappings`.
 - There is no `build` parameter, so no entry filtering — which, per above, is
   what we want anyway.
+
+> **On an array column the index is required; the bare name returns `null`.**
+> ✅ measured. `BattlePetEffectProperties::ParamTypeEnum` is mapped at every
+> index and unmapped without one:
+>
+> ```
+> ParamTypeEnum[1]  -> {metaType: 1, entries: [Int, Ability]}
+> ParamTypeEnum     -> null
+> ParamTypeEnum[9]  -> null        (no such index, no bare key to fall back to)
+> ```
+>
+> The fallback in `FilesystemEnumProvider.GetEnumDefinition` runs
+> **indexed → bare**, never bare → indexed: with an index it tries
+> `table::column[n]` then `table::column`; without one it tries only
+> `table::column`. Iterating CSV headers is safe because DBCD emits
+> `ParamTypeEnum[0]`, `[1]`, … — but any code that normalises a column name
+> by stripping `[n]` before asking will get `null` and read it as "not an
+> enum". Table and column matching are case-insensitive.
 
 Relevant to the open `LightData` question in CLAUDE.md: 23 `LightData` columns
 are mapped `COLOR` in `mapping.dbdm`, all of them named.
@@ -896,7 +951,7 @@ convention. `fks` is what turns an ID column into a name in a report.
 
 Errors are returned as HTTP 200 with the message in `error`, like `/dbc/info`.
 
-### `GET /dbc/relations` ⚠️ source-read and `GET /dbc/labelColumns` ✅ measured
+### `GET /dbc/relations` and `GET /dbc/labelColumns` ✅ measured
 
 `RelationController.cs` / `LabelController.cs`. No parameters.
 
@@ -918,7 +973,7 @@ These are the 531 / 12 in CLAUDE.md's baseline metrics.
 
 ## Row lookup and rendered tooltips
 
-### One row — `GET /dbc/peek/{name}` ⚠️ source-read
+### One row — `GET /dbc/peek/{name}` ✅ measured
 
 `PeekController.cs:30`.
 
@@ -941,7 +996,7 @@ fields are emitted as their numeric value.
 - `pushIDs` filters the hotfix overlay to specific pushes, which is the cheapest
   way to answer "what did push 112132 change in this row".
 
-### All matching rows — `GET /dbc/find` and `GET /dbc/find/{name}` ⚠️ source-read
+### All matching rows — `GET /dbc/find` and `GET /dbc/find/{name}` ✅ measured
 
 `FindController.cs:15` and `:127`.
 
@@ -1009,6 +1064,14 @@ which that route does not return at all.
 
 `/dbc/tooltip/wex/{expression}` renders a world state expression to English via
 `WSExpressionParser`.
+
+> **`expression` is a hex byte string, not an ID, and bad input is a 500.**
+> ✅ measured: `/dbc/tooltip/wex/1` throws `FormatException` ("not a valid hex
+> string as its length is not a multiple of 2") from `Convert.FromHexString`,
+> and `/dbc/tooltip/wex/0100` — valid hex, but not a well-formed expression —
+> throws `IndexOutOfRangeException` from `EvalArethmaticExp`. There is no
+> validation and no error envelope. Feed it a serialised WSE blob from a DB2
+> column or leave it alone.
 
 ---
 
@@ -1141,6 +1204,53 @@ lines below them. The live response settled it.
 
 | `GET /dbc/labelColumns` | 12 entries, all `Table::LabelID` — not display-name columns |
 | `GET /dbc/header/Light` | `ContinentID → Map::ID`, `LightParamsID[0..7] → LightParams::ID`, no unverifieds |
+
+A third pass, same day, cleared every non-mutating route that was still ⚠️:
+
+| Route | Result |
+|---|---|
+| `GET /dbc/meta/getMeta` | ENUM resolves; COLOR returns `null`; **array columns need the index** — `ParamTypeEnum[1]` resolves, bare `ParamTypeEnum` is `null` |
+| `GET /dbc/peek/{name}` | every documented quirk reproduced: `values:{}` on a miss, `Error` key on a bad table, `Sorry` on `filedata`, `offset` always 0, `build=?` accepted, arrays expanded |
+| `GET /dbc/find/{name}` | 131 rows for `Light::ContinentID=1`; `[]` on no match **and** on a bad table; `ItemSparse::ID=720` returns 0 plain / 1 hotfixed (`"Brawler Gloves"`) |
+| `GET /casc/chash` | byte-identical to `/casc/fdid` for the same file (SHA-256 match); default name `<chash>.unk`; 404 on both an unknown and a malformed hash |
+| `GET /casc/zip/fdids` | 200; entries named from the listfile (`INV_Sword_04.blp`); the bogus FDID landed in `errors.txt` as documented |
+| `GET /map/list` | 71 entries from 75 `Map` rows; **all numeric IDs, no `wdtFileDataID == 0`** — the listfile-fallback branch does not trigger on this build |
+| `GET /map/wdtMask` | 4096 ints, 1224 non-zero for Azeroth; `layer=6` is a 500, as predicted |
+| `GET /map/wdtMaskPuzzle` | 4096 tiles, the 7 documented keys; 87 non-zero `liquidFlow` on the WDT path |
+| `GET /map/clearCache` | 200, empty body; masks rebuild identically afterwards |
+| `GET /dbc/tooltip/spell` | 133 → Fireball with a parsed description; **27997 and 32837 (no `SpellMisc` row) return icon 134400**, confirming the fallback |
+| `GET /dbc/tooltip/file` | `{fileDataID, filename, type}`; `"Unknown"` for both on a miss; `fileDataID` comes back a **string** |
+| `GET /dbc/data/{name}` | envelope carries `error`; values **are** HTML-encoded, as warned |
+| `GET /dbc/export/db2` | 200, `map.db2`, magic **`WDC5`** |
+| `GET /dbc/relations` | 531 keys, matching the baseline metric; `/dbc/relations/Map::ID` lists 70 referencing columns |
+| `GET /build/list` | 200, JSON array — **and it holds two Forever builds we had not recorded** (see below) |
+| `GET /casc/moreinfo` | 200, 5,129 bytes, HTML served as `text/plain` |
+| `GET /size/data` | **500** — `ArgumentOutOfRangeException` from `TACTSharp.EncodingInstance.FindContentKey` |
+| `GET /casc/hashbyid` | **`{}` for every input** — `ValueTuple` return with no `IncludeFields` |
+| `GET /dbc/tooltip/wex` | 500 on `1` (not hex) and on `0100` (hex, malformed expression) |
+
+**Discrepancies between the source-read description and the response:**
+
+1. **`getMeta` on an array column requires the index.** The fallback runs
+   indexed → bare, not bare → indexed, so stripping `[n]` before asking
+   returns `null` and reads as "not an enum".
+2. **`/casc/hashbyid` is broken** — a `ValueTuple` return serialises to `{}`.
+   `/casc/moreinfo` is the only way to obtain a CKey.
+3. **`/size/data` 500s on this build**, on the same TACTSharp exception as
+   the ten known-benign FDIDs. There is no working size route at all here.
+4. **`/dbc/tooltip/wex` takes a hex blob, not an expression ID**, and has no
+   validation.
+5. **`/casc/moreinfo` is served `text/plain`** while returning HTML.
+6. **`/map/list`'s listfile-fallback branch never triggers on this build** —
+   every map has a WDT, so `wdtFileDataID == 0` and the always-zero
+   `liquidFlow` path documented from source remain unexercised claims inside
+   an otherwise measured route.
+
+Not exercised, with reasons: `/map/download` (a 32768 × 32768 in-memory PNG),
+`/dbc/export/all` (effectively a full extraction), and the four mutating
+routes — `/dbc/export/alltodisk`, `/dbc/hotfixes/downloadLatest`,
+`/dbc/reloadDefs`, `/dbc/reloadHotfixes` — which are held until there is a gap
+between extraction runs.
 
 **Corrected by that pass**, beyond the `build=` reversal: `/casc/fdid` returns
 **200 with bytes** for encrypted FDIDs that `/casc/blp2png` 404s on, so the two
