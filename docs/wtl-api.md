@@ -185,6 +185,12 @@ Status codes (`ExportController.cs:70-93`):
 | 404 | `FileNotFoundException` — table not in this build |
 | 400 | any other exception during generation |
 
+**The two variants of the same table can return different statuses.**
+`TimeEventData` at 1.60.1.69913 returns **204 plain and 200 with 3 rows
+hotfixed** — the table ships empty and exists only as live hotfix data. A
+script that decides "empty" from the plain request alone will silently drop
+it. `extract_db2.py` records this as `resolution: "hotfix_only"`.
+
 On POST, the form body becomes `DBCViewFilter` parameters (search/filter), same
 shape as the DataTables query. For plain extraction, use GET.
 
@@ -529,6 +535,18 @@ Checked against a live WTL on `http://localhost:5080`, build `1.60.1.69913`,
    all three variants — present in the definitions and in the hotfix DB, zero
    rows in the DB2 itself. A 204 is not an error and carries no body; treat it
    as "empty table", distinct from 404 "not in this build".
+
+4. **A 204 on the plain variant does not mean the table is empty.** Found
+   during the first full extraction run: `db2_hotfixed/` came out with one
+   more CSV than `db2/`. The extra was `TimeEventData` — 204 plain, 200 with
+   3 rows hotfixed. Across all 1161 tables it is the only such case, which is
+   precisely why it is easy to miss.
+
+5. **Full-run figures** (1161 tables, 2322 exports, 0 errors, ~12s at 8
+   workers): 610 `ok`, 550 `empty`, 1 `hotfix_only`, 0 `not_in_build`,
+   15 with a hotfix delta. 1,913,530 plain rows / 1,921,642 hotfixed.
+   Five of the 15 deltas have **identical row counts** with changed values,
+   so variant comparison must hash content rather than count rows.
 
 ### Not yet verified
 

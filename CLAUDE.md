@@ -139,6 +139,9 @@ against a live instance on 1.60.1.69913.
 - **204 and 404 mean different things.** `204 No Content` is
   defined-but-zero-rows in this build (e.g. `modifiedcraftingitem`); `404` is
   not in this build at all. Handle them distinctly — a 204 is not a failure.
+  **The two variants of a table can disagree:** `TimeEventData` is 204 plain
+  but 200 with rows hotfixed — a table that exists *only* as live data. Do
+  not decide a table is empty from the plain request alone.
 - **`/dbc/hotfixes/list` returns zeros when given no query string.** It
   short-circuits on `!Request.QueryString.HasValue`, so a bare request looks
   like "no hotfixes exist". Always pass `?length=N`.
@@ -235,7 +238,7 @@ apply to the libraries.
 │   ├── run-wtl.ps1          # launch WTL from the correct working directory
 │   ├── sync_refs.py         # pull WoWDBDefs / listfile / TACTKeys
 │   ├── fetch_builds.py      # poll version endpoint, update builds.json
-│   ├── extract_db2.py       # WTL HTTP -> CSV per table
+│   ├── extract_db2.py       # WTL HTTP -> CSV per table, plain + hotfixed
 │   ├── inventory.py         # file listing + magic-byte classification
 │   └── diff_builds.py       # compare two build dirs, emit markdown
 ├── out/                     # GITIGNORED — extracted data
@@ -249,6 +252,21 @@ apply to the libraries.
 │   └── <from>_to_<to>.md
 └── vendor/                  # GITIGNORED — cloned third-party tools
 ```
+
+### `manifest.json` resolution values
+
+One per table, describing how it resolved against the **shipped** build:
+
+| Value | Meaning |
+|---|---|
+| `ok` | 200, has rows |
+| `empty` | 204 — defined but zero rows, in both variants. A success |
+| `hotfix_only` | 204 plain, 200 hotfixed — exists **only** as live hotfix data |
+| `not_in_build` | 404 — not present in this build |
+| `error` | 400, or a transport failure. `error` field carries the reason |
+
+`hotfix_delta` is set independently, from a content hash of the two CSVs, and
+is true for `hotfix_only` tables as well as changed `ok` ones.
 
 ---
 
@@ -283,6 +301,11 @@ regions but `cn` can lag or diverge.
   live tuning — a value that moves only in `db2_hotfixed/` was hotfixed, one
   that moves in both shipped in the build. Collapsing them into a single
   output loses that distinction permanently.
+- **Compare variants by content hash, not row count.** A hotfix can change a
+  value without adding or removing a row — 5 of the 15 deltas in
+  1.60.1.69913 (`GlobalStrings`, `Light`, `LightData`,
+  `LightDataGlobalVolumeFog`, `LightParams`) have identical row counts and
+  different data. A count-based check misses every one of them.
 - **Cap concurrency at ~8.** CASC reads are IO-bound; oversubscribing thrashes
   the disk.
 

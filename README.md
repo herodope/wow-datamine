@@ -122,10 +122,11 @@ minutes.
    curl.exe -s http://localhost:5080/dbc/updateDefs
    ```
 7. Extract DBCs for the new build via the builds page.
-8. Run the inventory and DB2 extraction. Every table is extracted **twice**,
-   plain into `db2/` and hotfix-applied into `db2_hotfixed/` — see
-   [Hotfixes vs DB2s](#hotfixes-vs-db2s). *(`inventory.py` /
-   `extract_db2.py` are not written yet.)*
+8. `python scripts/extract_db2.py` — every table extracted **twice**, plain
+   into `db2/` and hotfix-applied into `db2_hotfixed/`, with per-table results
+   in `manifest.json`. Resumable: interrupt and re-run to continue. See
+   [Hotfixes vs DB2s](#hotfixes-vs-db2s). Then run the inventory.
+   *(`inventory.py` is not written yet.)*
 9. Diff against the previous Forever build. *(`diff_builds.py` not written
    yet.)*
 10. Commit `builds.json` and the new report.
@@ -148,6 +149,7 @@ output**:
 | `/listfile/db2s` returns 1342 tables unfiltered, 1161 build-filtered | Iterate the filtered list or ~181 exports come back empty |
 | Two DataTables envelope shapes | `/dbc/info` and `/dbc/data` have an `error` key; `/dbc/hotfixes/list`, `/listfile/files`, `/build/table` do not — `d["error"]` raises `KeyError` |
 | `204` vs `404` | 204 = table defined but zero rows in this build; 404 = not in this build. Handle distinctly |
+| The two variants can return different statuses | `TimeEventData` is 204 plain but 200 with rows hotfixed — it exists only as live data. Don't judge "empty" from the plain request alone |
 | `/dbc/hotfixes/list` with no query string | Returns all zeros, looking like "no hotfixes". Pass `?length=N` |
 | Default `locale` is `All_WoW`, not `enUS` | Pass `locale` explicitly |
 
@@ -173,6 +175,12 @@ out/<version>.<build>/
 ├── files.csv           fdid, path, size, encrypted, content_type
 └── manifest.json       row counts, layouthashes, metrics
 ```
+
+Each table in `manifest.json` resolves to one of `ok`, `empty`,
+`hotfix_only` (204 plain but populated by hotfixes), `not_in_build` or
+`error`, alongside both row counts, the layouthash, both HTTP statuses and a
+`hotfix_delta` flag computed from a content hash — not a row count, since a
+hotfix can change a value without changing the number of rows.
 
 A value that moves only in `db2_hotfixed/` was hotfixed; one that moves in both
 shipped in the build. Collapsing the two into a single output loses that
@@ -222,7 +230,7 @@ are reproducible; `builds.json` is not.
 | `fetch_builds.py` | ✅ | Poll the version endpoint, merge Forever builds into `builds.json` |
 | `sync_refs.py` | ✅ | Clone/refresh WoWDBDefs, listfile, TACTKeys; download listfile CSV |
 | `run-wtl.ps1` | ✅ | Launch WTL from the correct working directory |
-| `extract_db2.py` | ⬜ | WTL HTTP → CSV per table, both plain and hotfix-applied |
+| `extract_db2.py` | ✅ | WTL HTTP → CSV per table, both plain and hotfix-applied; resumable, writes `manifest.json` |
 | `inventory.py` | ⬜ | File listing. Magic-byte classification is **low priority** — the listfile names 2,274,258 files for this build, so little is left unnamed |
 | `diff_builds.py` | ⬜ | Compare two build dirs, emit markdown |
 
