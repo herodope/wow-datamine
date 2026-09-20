@@ -255,12 +255,16 @@ def summarize_pushes(index, table, keys):
     return "; ".join(parts) or "—"
 
 
-def render_contamination(findings):
-    """Suspected retail leftovers. Delegates so both diff scripts render alike."""
-    return contamination.render_markdown(findings)
+def render_contamination(findings, coverage=None):
+    """Suspected retail leftovers. Delegates so both diff scripts render alike.
+
+    `coverage` must be passed through: without it a zero from rules that could
+    not read the data renders as a clean result.
+    """
+    return contamination.render_markdown(findings, coverage)
 
 
-def render(build, results, index, hotfix_rows, max_rows, manifest, findings=None):
+def render(build, results, index, hotfix_rows, max_rows, manifest, findings=None, coverage=None):
     L = []
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -301,7 +305,7 @@ def render(build, results, index, hotfix_rows, max_rows, manifest, findings=None
     L.append("---")
     L.append("")
 
-    L += render_contamination(findings or [])
+    L += render_contamination(findings or [], coverage)
 
     # Summary, ordered by magnitude.
     L.append("## Summary")
@@ -468,19 +472,28 @@ def main(argv=None):
                 return header, {r[idx]: r for r in rows if idx < len(r)}
         return None, {}
 
-    findings = []
+    findings, coverage = [], None
     if not args.no_contamination:
-        findings, _ref = contamination.scan(results, load_table)
+        findings, _ref, coverage = contamination.scan(results, load_table)
         log("")
-        if findings:
+        if coverage["verdict"] == "not_scanned":
+            # A zero from rules that could not read the data is not a clean
+            # result. Say so here as well as in the report.
+            log(f"  contamination: NOT SCANNED -- {coverage['rows_submitted']:,} row(s) across "
+                f"{coverage['tables_submitted']} table(s), no rule could read any of them")
+            for rule in coverage["rules_never_applicable"]:
+                log(f"    skipped: {rule}")
+        elif findings:
             log(f"  {len(findings)} suspected retail-contamination finding(s)")
             for f in findings:
                 log(f"    [{f['confidence'].upper():6}] {f['rule']}: {f['table']} {f['record']}")
+            if coverage["rules_never_applicable"]:
+                log(f"    (rules never applicable here: {', '.join(coverage['rules_never_applicable'])})")
         else:
             log("  no suspected retail contamination")
 
     report_path.write_text(
-        render(build, results, index, hotfix_rows, args.max_rows, manifest, findings),
+        render(build, results, index, hotfix_rows, args.max_rows, manifest, findings, coverage),
         encoding="utf-8",
     )
 

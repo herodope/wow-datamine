@@ -197,26 +197,187 @@ def _orphan_removal(result, ref, load_table):
     }]
 
 
+# Every rule here is narrow, and two of the three are pinned to a single table
+# by name. applicability() states that up front so a zero can be told apart
+# from data no rule could read. See "an unscanned zero is not a clean result"
+# in CLAUDE.md.
+def applicability(result):
+    """[(rule, applicable, why)] for one diff result."""
+    table = result.get("table", "")
+    header = result.get("header") or []
+    has_add_rm = bool(result.get("added") or result.get("removed"))
+
+    map_cols = [n for n in header if n.strip().lower() in MAP_REF_COLUMNS]
+    why = "reads " + ", ".join(sorted(MAP_REF_COLUMNS)) + "; "
+    why += ("found " + ", ".join(map_cols)) if map_cols else "table carries none of them"
+    if not has_add_rm:
+        why += "; no added/removed rows"
+    yield ("dangling_map_ref", bool(map_cols) and has_add_rm, why)
+
+    why = "scoped to table Light"
+    if table != "Light":
+        why += "; this is " + str(table)
+    if not result.get("changed"):
+        why += "; no changed rows"
+    yield ("light_absent_map", table == "Light" and bool(result.get("changed")), why)
+
+    why = "scoped to table Item and to removed rows"
+    if table != "Item":
+        why += "; this is " + str(table)
+    if not result.get("removed"):
+        why += "; no removed rows"
+    yield ("orphan_removal", table == "Item" and bool(result.get("removed")), why)
+
+
+ALL_RULES = {"dangling_map_ref", "light_absent_map", "orphan_removal"}
+
+
 def scan(results, load_table):
-    """Run every rule over the diff results. Returns a list of findings."""
+    """Run every rule over the diff results.
+
+    Returns (findings, ref, coverage). `coverage` exists because a rule that
+    could not read the data returns [] exactly like a rule that read it and
+    found nothing -- and callers were rendering both as "0 findings".
+
+    coverage["verdict"] is one of:
+
+        "scanned"      at least one rule was applicable somewhere
+        "not_scanned"  NO rule could read ANY submitted table. A zero here
+                       says nothing whatever about the data.
+        "no_data"      nothing was submitted
+
+    Measured example: the six 461xxx Thunder Clap rows span 11 spell tables
+    and 72 rows, and every rule is inapplicable to all of them -- no spell
+    table carries a map-reference column, and the other two rules are pinned
+    to Light and Item. The honest answer there is "not scanned", not "clean".
+    """
     ref = build_reference(load_table)
     findings = []
+    per_table, applicable_rules = [], set()
+
     for r in results:
+        rules = list(applicability(r))
+        for name, ok, _why in rules:
+            if ok:
+                applicable_rules.add(name)
+        per_table.append({
+            "table": r.get("table"),
+            "rows": len(r.get("added", [])) + len(r.get("removed", [])) + len(r.get("changed", [])),
+            "applicable": [n for n, ok, _ in rules if ok],
+            "skipped": [{"rule": n, "why": w} for n, ok, w in rules if not ok],
+        })
+
         findings += _dangling_map_refs(r, ref, r["removed"], "removed")
         findings += _dangling_map_refs(r, ref, r["added"], "added")
         findings += _light_absent_map(r, ref)
         findings += _orphan_removal(r, ref, load_table)
 
+    if not results:
+        verdict = "no_data"
+    elif applicable_rules:
+        verdict = "scanned"
+    else:
+        verdict = "not_scanned"
+
+    coverage = {
+        "verdict": verdict,
+        "tables_submitted": len(results),
+        "rows_submitted": sum(t["rows"] for t in per_table),
+        "rules_applicable": sorted(applicable_rules),
+        "rules_never_applicable": sorted(ALL_RULES - applicable_rules),
+        "tables_with_no_applicable_rule": [t["table"] for t in per_table if not t["applicable"]],
+        "per_table": per_table,
+    }
+
     order = {HIGH: 0, MEDIUM: 1}
     findings.sort(key=lambda f: (order.get(f["confidence"], 9), f["table"], str(f["record"])))
-    return findings, ref
+    return findings, ref, coverage
 
 
-def render_markdown(findings):
-    """The "Retail contamination" report section. Shared by both diff scripts."""
+def _generic_reason(rule, why):
+    """Strip the per-table clause so reasons collapse to one row per rule.
+
+    Keeps the structural cause (what the rule reads, what table it is pinned
+    to) and drops "this is <Table>", which is the only part that varies purely
+    by which table was submitted.
+    """
+    return "; ".join(
+        part for part in why.split("; ")
+        if not part.startswith("this is ")
+    )
+
+
+def render_markdown(findings, coverage=None):
+    """The "Retail contamination" report section. Shared by both diff scripts.
+
+    `coverage` comes from scan(). Without it a zero renders as a clean result,
+    which is wrong whenever no rule could read the submitted tables.
+    """
     L = ["## Retail contamination", ""]
+    verdict = (coverage or {}).get("verdict")
+
+    if verdict == "no_data":
+        L += ["Nothing was submitted to the contamination rules.", "", "---", ""]
+        return L
+
+    if verdict == "not_scanned":
+        L += [
+            "**NOT SCANNED -- this is not a clean result.**",
+            "",
+            "{:,} row(s) across {} table(s) were submitted and **no contamination "
+            "rule was able to read any of them**. The rules are narrow, and two of "
+            "the three are pinned to a single table by name, so they returned "
+            "nothing for lack of anything to read -- not because the data looks "
+            "clean. Treat this as unmeasured.".format(
+                coverage["rows_submitted"], coverage["tables_submitted"]),
+            "",
+            "| Rule | Why it could not run |",
+            "|---|---|",
+        ]
+        # One row per RULE, not per rule-and-table: the per-table reasons
+        # differ only by the table name, and 3 rules x N tables of near
+        # identical text buries the point.
+        reasons = {}
+        for t in coverage["per_table"]:
+            for sk in t["skipped"]:
+                reasons.setdefault(sk["rule"], set()).add(_generic_reason(sk["rule"], sk["why"]))
+        for rule in sorted(reasons):
+            # Distinct reasons across tables go on their own lines rather than
+            # being run together with semicolons, which reads as one garbled
+            # sentence when two tables are skipped for different reasons.
+            # Collapse variants that share a primary cause. Two tables can be
+            # skipped for the same structural reason with a different trailing
+            # clause ("...; no added/removed rows"); that is one reason, not
+            # two, and the shortest phrasing is the clearest.
+            by_primary = {}
+            for v in sorted(reasons[rule], key=len):
+                by_primary.setdefault(v.split("; ")[0], v)
+            cell = "<br>".join(by_primary[k] for k in sorted(by_primary))
+            L.append("| `" + rule + "` | " + cell + " |")
+        L += [
+            "",
+            "Submitted tables: " + ", ".join(
+                "`" + str(t) + "`" for t in coverage["tables_with_no_applicable_rule"]) + ".",
+            "",
+            "---",
+            "",
+        ]
+        return L
+
     if not findings:
-        L += ["No suspected retail contamination detected in this diff.", "", "---", ""]
+        L += ["No suspected retail contamination detected in this diff.", ""]
+        if coverage:
+            L.append("Rules that actually ran: "
+                     + ", ".join("`" + r + "`" for r in coverage["rules_applicable"]) + ".")
+            if coverage["rules_never_applicable"]:
+                L.append("Never applicable to this diff: "
+                         + ", ".join("`" + r + "`" for r in coverage["rules_never_applicable"])
+                         + " -- so this zero covers only the rules listed above.")
+            if coverage["tables_with_no_applicable_rule"]:
+                L.append("{} changed table(s) had no applicable rule and were not "
+                         "scanned.".format(len(coverage["tables_with_no_applicable_rule"])))
+            L.append("")
+        L += ["---", ""]
         return L
 
     L.append(

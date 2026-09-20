@@ -276,6 +276,101 @@ def render_encryption(fd):
     return L
 
 
+def diff_gametables(old_dir, new_dir):
+    """Compare out/<build>/gametables/ between two builds.
+
+    GameTables are tab-separated text, not DB2s, so none of the DB2 machinery
+    applies -- no layouthash, no DBD definition, no ID column. They are small
+    and their header row names the columns exactly as the client does, so this
+    compares them as text and reports per-file added/removed/changed plus the
+    changed column names.
+
+    They matter for scaling questions: SpellScaling ships as a 204-empty DB2
+    and the per-level curves live in SpellScaling.txt here instead.
+    """
+    # Callers pass the db2/ directory (see resolve()), same as diff_files.
+    old_gt, new_gt = old_dir.parent / "gametables", new_dir.parent / "gametables"
+    if not old_gt.is_dir() and not new_gt.is_dir():
+        return None
+
+    def read(d):
+        out = {}
+        if not d.is_dir():
+            return out
+        for f in sorted(d.glob("*.txt")):
+            raw = f.read_bytes()
+            try:
+                lines = raw.decode("utf-8", errors="replace").splitlines()
+            except Exception:                       # noqa: BLE001
+                lines = []
+            header = lines[0].split("\t") if lines else []
+            out[f.name] = {"sha": hashlib.sha256(raw).hexdigest(),
+                           "rows": max(0, len(lines) - 1),
+                           "header": header}
+        return out
+
+    old, new = read(old_gt), read(new_gt)
+    added = sorted(set(new) - set(old))
+    removed = sorted(set(old) - set(new))
+    changed = []
+    for name in sorted(set(old) & set(new)):
+        if old[name]["sha"] == new[name]["sha"]:
+            continue
+        cols_old, cols_new = old[name]["header"], new[name]["header"]
+        changed.append({
+            "name": name,
+            "rows_old": old[name]["rows"],
+            "rows_new": new[name]["rows"],
+            "cols_added": [c for c in cols_new if c not in cols_old],
+            "cols_removed": [c for c in cols_old if c not in cols_new],
+        })
+    return {"old_count": len(old), "new_count": len(new),
+            "added": added, "removed": removed, "changed": changed}
+
+
+def render_gametables(gt):
+    """The "GameTables" report section."""
+    L = ["## GameTables", ""]
+    if gt is None:
+        L += [
+            "Not extracted for one or both builds. GameTables are tab-separated "
+            "text files under `GameTables/` in CASC, not DB2s -- `/listfile/db2s` "
+            "cannot list them and WTL exposes no route, so `extract_db2.py` never "
+            "sees them. Run `scripts/extract_gametables.py` (after `inventory.py`, "
+            "which it needs for discovery).",
+            "",
+            "**This is a gap, not a clean result.** `SpellScaling` ships as a "
+            "204-empty DB2 and the per-level curves live in `SpellScaling.txt` "
+            "here, so a scaling question cannot be answered without them.",
+            "", "---", "",
+        ]
+        return L
+
+    L.append(f"{gt['old_count']} -> {gt['new_count']} table(s).")
+    L.append("")
+    if not (gt["added"] or gt["removed"] or gt["changed"]):
+        L += ["No GameTable changed.", "", "---", ""]
+        return L
+
+    if gt["added"]:
+        L += [f"**Added:** {', '.join('`' + n + '`' for n in gt['added'])}", ""]
+    if gt["removed"]:
+        L += [f"**Removed:** {', '.join('`' + n + '`' for n in gt['removed'])}", ""]
+    if gt["changed"]:
+        L += ["| Table | Rows | Columns added | Columns removed |", "|---|---|---|---|"]
+        for c in gt["changed"]:
+            rows = (str(c["rows_old"]) if c["rows_old"] == c["rows_new"]
+                    else f"{c['rows_old']} -> {c['rows_new']}")
+            L.append(
+                f"| `{c['name']}` | {rows} | "
+                f"{', '.join('`' + x + '`' for x in c['cols_added']) or '—'} | "
+                f"{', '.join('`' + x + '`' for x in c['cols_removed']) or '—'} |"
+            )
+        L.append("")
+    L += ["---", ""]
+    return L
+
+
 def render_files(fd):
     L = ["## Files", ""]
     if "unavailable" in fd:
@@ -419,7 +514,7 @@ def render_table_section(r, max_rows):
     return L
 
 
-def render(old_build, new_build, results, findings, fd, unchanged_count, max_rows):
+def render(old_build, new_build, results, findings, fd, unchanged_count, max_rows, gt=None, coverage=None):
     L = []
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     high = [r for r in results if r["table"] in HIGH_SIGNAL]
@@ -450,8 +545,9 @@ def render(old_build, new_build, results, findings, fd, unchanged_count, max_row
 
     L += render_encryption(fd)
     L += render_files(fd)
+    L += render_gametables(gt)
     L += render_schema_changes(results)
-    L += contamination.render_markdown(findings)
+    L += contamination.render_markdown(findings, coverage)
 
     L.append("## Summary")
     L.append("")
@@ -563,7 +659,7 @@ def main(argv=None):
 
     log(f"  {len(results)} changed, {unchanged} unchanged")
 
-    findings = []
+    findings, coverage = [], None
     if not args.no_contamination:
         def load_table(name):
             for d in (new_dir, old_dir):
@@ -573,12 +669,21 @@ def main(argv=None):
                     return header, {r[idx]: r for r in rows if idx < len(r)}
             return None, {}
 
-        findings, _ref = contamination.scan(results, load_table)
+        findings, _ref, coverage = contamination.scan(results, load_table)
         log("")
-        if findings:
+        if coverage["verdict"] == "not_scanned":
+            # A zero from rules that could not read the data is not a clean
+            # result. Say so here as well as in the report.
+            log(f"  contamination: NOT SCANNED -- {coverage['rows_submitted']:,} row(s) across "
+                f"{coverage['tables_submitted']} table(s), no rule could read any of them")
+            for rule in coverage["rules_never_applicable"]:
+                log(f"    skipped: {rule}")
+        elif findings:
             log(f"  {len(findings)} suspected retail-contamination finding(s)")
             for f in findings:
                 log(f"    [{f['confidence'].upper():6}] {f['rule']}: {f['table']} {f['record']}")
+            if coverage["rules_never_applicable"]:
+                log(f"    (rules never applicable here: {', '.join(coverage['rules_never_applicable'])})")
         else:
             log("  no suspected retail contamination")
 
@@ -586,9 +691,16 @@ def main(argv=None):
     if "unavailable" not in fd:
         log(f"  files: +{len(fd['added']):,} -{len(fd['removed']):,} retyped {len(fd['retyped']):,}")
 
+    gt = diff_gametables(old_dir, new_dir)
+    if gt is None:
+        log("  gametables: NOT EXTRACTED for one or both builds -- run extract_gametables.py")
+    else:
+        log(f"  gametables: {gt['old_count']} -> {gt['new_count']}, "
+            f"+{len(gt['added'])} -{len(gt['removed'])} changed {len(gt['changed'])}")
+
     config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     path = config.report_path(args.from_build, args.to_build)
-    path.write_text(render(args.from_build, args.to_build, results, findings, fd, unchanged, args.max_rows), encoding="utf-8")
+    path.write_text(render(args.from_build, args.to_build, results, findings, fd, unchanged, args.max_rows, gt, coverage), encoding="utf-8")
     log("")
     log(f"  -> {path}")
     return 0
