@@ -329,6 +329,15 @@ regions but `cn` can lag or diverge.
   1.60.1.69913 (`GlobalStrings`, `Light`, `LightData`,
   `LightDataGlobalVolumeFog`, `LightParams`) have identical row counts and
   different data. A count-based check misses every one of them.
+- **Key rows on the `ID` column, never on column 0.** DBCD emits CSV columns
+  in DBD-definition order, so the ID column is **not reliably first** —
+  `Achievement.csv` starts with `Description_lang` and has `ID` at index 3.
+  A script keying on column 0 produces **silently wrong** diffs: keying
+  `Achievement` that way collapsed 114 of its 233 rows onto duplicate
+  description strings and reported no change against a real 233 → 232
+  delta. Always key on the column literally named `ID`, fall back to column 0
+  only when absent, and state which key was used in the output. This applies
+  to `diff_builds.py` as much as to `diff_hotfixes.py`.
 - **Cap concurrency at ~8.** CASC reads are IO-bound; oversubscribing thrashes
   the disk.
 
