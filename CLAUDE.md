@@ -585,38 +585,82 @@ ladders carrying the same `NameSubtext_lang` rank strings:
 
 (Plus 11582, 13532 and 413589, which carry no rank or no description.)
 
-**The modern ladder is structurally indistinguishable from the classic one.**
-Measured on 1.60.1.69913:
+**The two ladders are identical where a copy would be, and diverge where it
+counts.** Measured on 1.60.1.69913.
 
-- identical supporting-row profile across **eleven** tables — 1 row each in
-  `SpellName`, `Spell`, `SpellMisc`, `SpellLevels`, `SpellPower`,
-  `SpellCategories`, `SpellClassOptions`, `SpellCooldowns`,
-  `SpellTargetRestrictions`, `SpellShapeshift` and 2 in `SpellEffect`, for
-  every one of the six, matching the classic ranks exactly
-- **0 dangling foreign keys**, walking every FK from `/dbc/header` across all
-  nine keyed tables — same as the classic ladder
-- no contamination rule fires, and per the convention above that is
-  `not_scanned`, not clean: no spell table carries a map-reference column and
-  the other two rules are pinned to `Light` and `Item`
+The modern ladder has an identical supporting-row profile across eleven
+tables — 1 row each in `SpellName`, `Spell`, `SpellMisc`, `SpellLevels`,
+`SpellPower`, `SpellCategories`, `SpellClassOptions`, `SpellCooldowns`,
+`SpellTargetRestrictions`, `SpellShapeshift` and 2 in `SpellEffect` — with
+0 dangling foreign keys, matching the classic ranks exactly. These are **not**
+orphan stubs, the opposite of the 75 `Item` cases.
 
-These are **not** orphan stubs — the opposite of the 75 `Item` cases, which
-have no `ItemSparse`/`ItemSearchName` row at all.
+> An earlier revision of this entry called that "structurally indistinguishable
+> from the classic ladder". **That claim was too strong.** All eleven tables
+> are the spell's *own definition* tables, where a copied spell looks identical
+> by construction — the profile was never capable of telling the two apart.
+> The divergence is in **inbound** references, which had not been checked.
 
-The only thing marking them out is the ID range, and per **Conventions** an ID
-range is supporting evidence, never a trigger. An earlier note in this session
-called them contamination on that basis alone; the data does not support it and
-it is withdrawn.
+#### The discriminator: inbound references
 
-**Watch, do not conclude:**
+`SkillLineAbility` is **populated** — 7,824 rows, `resolution: ok`. This is a
+real test, not a null result.
 
-- whether they appear in `SkillLineAbility` or any class-spell chain — not yet
-  checked, and the strongest available discriminator
-- whether they survive into 1.60.2, or are pruned the way the `Achievement`
-  and `Item` contamination was
+| | Classic | Modern |
+|---|---|---|
+| `SkillLineAbility` rows | **6** (SLA IDs 6073–6078, sequential) | **0** |
+| `SkillLine` | 26 = **Arms** | — |
+| `ClassMask` | 1 (Warrior) | — |
+| `SupercedesSpell` chain | complete: 6343 → 8198 → 8204 → 8205 → 11580 → 11581 | — |
+| `SpellLearnSpell` rows | 0 | 0 |
+| **Inbound FK references, each rank** | **15–17** | **exactly 10** |
+
+All ten of the modern ladder's references are from the spell's own definition
+tables. **Eight reference classes the classic ladder has and the modern one
+entirely lacks:**
+
+```
+SkillLineAbility::Spell            CooldownSetSpell::SpellID
+SkillLineAbility::SupercedesSpell  CooldownSetLinkedSpell::SpellID
+SpellLabel::SpellID                PlayerCondition::SpellID
+ItemEffect::SpellID                SpellEffect::EffectTriggerSpell
+```
+
+Zero go the other way — the modern ladder has no reference class the classic
+one lacks.
+
+**So the 461xxx ladder is defined but unconsumed:** unreachable from any skill
+line, unlabelled, not in a cooldown set, not gated by a player condition, not
+taught by anything, and triggered by nothing.
+
+`SpecializationSpells` is 204-empty, as expected for Classic, so it
+contributes nothing either way.
+
+#### Where the evidence came from
+
+The FK walk, resolving the **157 columns declared as FKs to a spell** via
+`/dbc/relations` — not from `contamination.py`. Submitting all 12 tables and
+150 rows to `contamination.scan` returned `not_scanned`: **0 of 3 rules could
+read any of them**. `SkillLineAbility` and `SpellLearnSpell` carry no
+map-reference column either, and the other two rules stay pinned to `Light`
+and `Item`. Per the convention above, that zero is not a clean result and is
+not evidence in either direction.
+
+#### Verdict: watch
+
+Still **watch, do not conclude**. An unreferenced definition is consistent with
+*both* staged-but-unfinished Forever content and retail leftovers, and nothing
+here separates those two. ID range alone remains explicitly not a trigger per
+**Conventions**; an earlier note calling these contamination on that basis is
+withdrawn.
+
+**Watch:**
+
+- whether `SkillLineAbility` rows appear for them in 1.60.2 — that would make
+  them intended content being wired up
+- whether they are pruned instead, the way the `Achievement` and `Item`
+  contamination was
 - whether any hotfix touches them; nothing does at 1.60.1.69913
-
-A duplicate rank ladder at modern IDs alongside a working classic one is odd.
-Odd is not a finding.
 
 ---
 
@@ -839,6 +883,20 @@ regions but `cn` can lag or diverge.
   the symptom" and "is my explanation of the symptom correct" are different
   experiments. Here the second one cost a single request — sampling
   `availableInBuild` over 20,000 rows and finding every value `true`.
+- **Match on declared FK relations, not on raw values.** Scanning every column
+  of every table for a numeric value finds real references and coincidental
+  collisions in the same pass, with nothing to tell them apart. Looking for
+  spell 6343 that way returns `WMOMinimapTexture::ID`, `TaxiPathNode::ID` and
+  `UiTextureAtlasMember::ID` alongside the genuine `SkillLineAbility::Spell` —
+  those tables simply have a row whose own ID is 6343.
+
+  Resolve the relation instead: `GET /dbc/relations/<Table>::<Column>` returns
+  every column DBD declares as a foreign key to that one (157 for a spell at
+  1.60.1.69913), and only those columns are worth reading. The difference is
+  not cosmetic — the raw-value scan reported ~47 "references" for a classic
+  Thunder Clap rank against a true count of 17, and the noise is what would
+  have hidden the 15–17 vs 10 asymmetry that finding #7 turns on.
+
 - **An unscanned zero is not a clean result.** A detector that could not read
   the data returns exactly what a detector that read it and found nothing
   returns. Before reporting "0 findings", establish that something was
