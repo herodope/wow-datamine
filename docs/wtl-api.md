@@ -281,10 +281,18 @@ First call triggers lazy init of the SoundKit / ModelFileData /
 TextureFileData / CreatureModelData maps and blocks on all four
 (`Task.WaitAll`), so it can be slow.
 
-This route iterates `Listfile.NameMap`, so it can only ever return **named**
-files. `recordsTotal` is `CASC.AvailableFDIDs.Count` and `recordsFiltered`
-(unsearched) is named-and-available; the difference is the unnamed count. At
-1.60.1.69913 both are **1,441,771** — nothing is unnamed.
+This route iterates `Listfile.NameMap`, so it can only ever return rows that
+are **members of** that map. `recordsTotal` is `CASC.AvailableFDIDs.Count` and
+`recordsFiltered` (unsearched) counts map members that are available in the
+build.
+
+> **Trap: matching totals do not mean every file is named.** At 1.60.1.69913
+> both are **1,441,771**, and an earlier revision of this file read that as
+> "nothing is unnamed". That is wrong, and the mistake was committed.
+> Membership in `NameMap` is not the same as having a non-empty name —
+> **19,583** of those rows carry an empty filename. Count empty values in the
+> filename column (index 1); never infer naming coverage from the two totals
+> agreeing. CLAUDE.md records this under **Key facts**.
 
 > **Trap: `type:unk` returns 0 despite 99,348 rows carrying that type.**
 > The `type:` search token looks up `Listfile.TypeMap` (`Listfile.cs:588`),
@@ -517,6 +525,448 @@ otherwise `useHotfixes=true` serves a stale overlay.
 
 ---
 
+## Images and textures
+
+Three routes in the whole API produce pixels: `/casc/blp2png`, `/map/tile` and
+`/map/download`. Everything else that looks image-related returns FDIDs or
+metadata that you then feed to one of these.
+
+### BLP → PNG — `GET /casc/blp2png`
+
+`CASCController.cs:1603`.
+
+| Param | Type | Default |
+|---|---|---|
+| `fileDataID` | int | — |
+| `build` | string | `""` or `"?"` → current build |
+
+Returns `image/png`, inline (no `FileDownloadName`, so no download filename).
+Implementation is BLPSharp → NetVips:
+
+```csharp
+var blp = new BLPSharp.BLPFile(file);
+var pixels = blp.GetPixels(0, out var w, out var h);   // mip 0 only
+raw[2].Bandjoin([raw[1], raw[0], raw[3]])              // BGRA -> RGBA
+```
+
+This is the route the UI uses everywhere — `tooltips.js:240`,
+`m3modelviewer.js:62`, `maps/worldmap.html:236`. The front end spells the
+parameter `filedataid`; ASP.NET query binding is case-insensitive, so either
+casing works.
+
+- **Always mip 0** — full resolution, no resize parameter. A 512×512 minimap
+  tile comes back 512×512; a 1024×1024 UI texture comes back 1024×1024. If the
+  report needs thumbnails, resize them after fetching.
+- **404 has two meanings.** `CASC.GetFileByID` returning null is one; the other
+  is the **encryption probe** — the route reads the first 4 bytes and returns
+  `NotFound()` if all four are zero. An encrypted file whose key is missing
+  decodes to zeros, so it 404s rather than erroring. Treat a 404 here as
+  "unavailable", not "does not exist", and cross-check the `encryptionStatus`
+  column on `/listfile/files` before reporting a file as absent.
+- **Not a BLP → 500 with an empty body.** There is no format check;
+  `new BLPFile(stream)` on a non-BLP throws, and `Startup.cs:25` only installs
+  `UseDeveloperExceptionPage` under `IsDevelopment()`. Running `-c Release`
+  there is no exception handler at all, so an unhandled throw is a bare 500.
+  Check `content_type` before calling.
+
+### Raw file bytes — `GET /casc/fdid`, `GET /casc/chash`
+
+`/casc/fdid` is documented under **Files** above. `/casc/chash`
+(`CASCController.cs:59`) is the same thing keyed on a content hash:
+
+| Param | Type | Default |
+|---|---|---|
+| `contenthash` | string | hex MD5 |
+| `filename` | string | `""` → `<chash>.unk` |
+| `build` | string | `""` → current build |
+
+Resolves CKey → EKey via `CASC.TryGetEKeysByCKey` and streams the first EKey.
+404 on miss; exceptions are swallowed to a console line and also 404.
+
+Neither route decodes anything — they hand back the file as it sits in CASC
+after BLTE. For a BLP that means BLP bytes, not an image.
+
+### Bulk extraction — `GET /casc/zip/fdids`
+
+`ZipController.cs:12`. The route is `casc/[controller]/fdids`, i.e.
+**`/casc/zip/fdids`**.
+
+| Param | Type | Notes |
+|---|---|---|
+| `ids` | string | comma-separated FDIDs, `uint.Parse` per element |
+| `filename` | string | download name for the zip |
+
+Builds the archive in memory and **stops adding at 100 MB** — over-limit files
+are skipped and listed in an `errors.txt` entry inside the zip, and the
+response is still a 200. Per-file failures go there too. **Read `errors.txt`;
+a short zip is not reported any other way.**
+
+Entry names come from `Path.GetFileName(Listfile.NameMap[fdid])`, so files with
+duplicate basenames collide inside the archive, and an FDID absent from
+`NameMap` raises `KeyNotFoundException` — caught by the generic handler and
+recorded in `errors.txt` rather than named `<fdid>.unk`. The `.unk` fallback in
+the source only fires for an FDID that is *in* the map with an empty name.
+
+### Map list — `GET /map/list`
+
+`MapController.cs:225`. No parameters. Returns a JSON array of
+
+```
+{ ID, internalName, displayName, wdtFileDataID }
+```
+
+Built from the `Map` DB2 (requires `ID`, `Directory`, `MapName_lang` — throws
+if any is missing) filtered to maps whose WDT exists in CASC, then **appended
+with listfile-derived entries** for any `world/minimaps/<dir>/` folder not
+already covered. Those appended rows have `ID` = the folder name (a *string*,
+not a numeric map id) and `wdtFileDataID` = 0. Downstream routes accept
+`wdtFileDataID=0` and fall back to listfile name probing, so this works — but
+**do not assume `ID` parses as an integer.**
+
+Uses `CASC.BuildName`; there is no `build` parameter.
+
+### Tile grid for a map — `GET /map/wdtMask`, `GET /map/wdtMaskPuzzle`
+
+`MapController.cs:636` and `:643`.
+
+| Param | Type | Notes |
+|---|---|---|
+| `mapID` | string | as returned by `/map/list` |
+| `directory` | string | `internalName` |
+| `wdtFileDataID` | uint | 0 = listfile fallback |
+| `layer` | byte | `wdtMask` only, default 0 |
+
+`wdtMask` returns a **flat array of 4096 ints** — FDIDs, 0 for an absent tile,
+indexed `x * 64 + y`. Layers:
+
+| `layer` | Source |
+|---|---|
+| 0 | `world/minimaps/<dir>/mapNN_NN.blp` |
+| 1 | `world/maptextures/<dir>/<dir>_NN_NN.blp` |
+| 2 | the same, `_n.blp` normals |
+| 3, 4 | root ADTs — vertex colours / heightmap, rendered not read |
+| 5 | `world/liquidflow/<dir>/….blp` |
+
+Anything else throws (`"Unknown layer type"`) → 500.
+
+`wdtMaskPuzzle` returns all layers at once as an array of
+`{ x, y, rootADT, minimapTexture, mapTexture, mapTextureN, liquidFlow }`, which
+is one request instead of five. Prefer it.
+
+Both are memoised per process in `puzzleMapMaskCache` / `mapMaskCache`, keyed on
+`(mapID, layer)` — **the cache key does not include the build**, and
+`GET /map/clearCache` (`MapController.cs:38`) is the only way to drop it. Clear
+it after switching builds or the second build gets the first build's grid.
+
+Note the listfile-fallback branch builds `liquidFlow` paths as
+`world/liquidflow/…` while it filters the candidate set on
+`world/maps/liquidflow/…` (`MapController.cs:301` vs `:326`), so `liquidFlow` is
+always 0 on that path. Do not read anything into a zero there.
+
+### One tile as pixels — `GET /map/tile`
+
+`MapController.cs:156`.
+
+| Param | Type | Default |
+|---|---|---|
+| `fileDataID` | uint | — |
+| `targetSize` | int | — |
+| `adtMethod` | string | `""` → `mccv` |
+| `output` | string | `raw` |
+
+> **`output=png` does not work for BLP input.** The `output` switch is only
+> consulted inside the `type == "adt"` branch (`MapController.cs:178`). Every
+> BLP goes down the tail path, which unconditionally returns
+> `application/octet-stream` holding **raw RGBA bytes** — `targetSize ×
+> targetSize × 4`, no header. Asking for `output=png` on a minimap tile returns
+> 200 with raw pixels that no image decoder will open. Use `/casc/blp2png` when
+> you want a PNG, and `/map/tile` only when you want pixels to composite
+> yourself.
+
+Two more behaviours worth knowing: a missing FDID returns a **black PNG** of
+`targetSize` (not a 404, and not raw bytes — the content type disagrees with
+both other branches), and an FDID with no known type is **assumed to be BLP**.
+The BLP path picks the smallest mip still ≥ `targetSize` then resizes down, so
+`targetSize` is honoured; the ADT path renders at 128 and scales up.
+
+### Whole map as one PNG — `GET /map/download`
+
+`MapController.cs:795`. Same four parameters as `wdtMask`. Returns `image/png`
+named `<mapID>.png`.
+
+**This is a 64×64 grid of 512 px tiles.** `DownloadMap` hardcodes the bounds to
+`(0, 0, 63, 63)` and `CompileMap` hardcodes `blpRes = 512`, so the output is
+**32768 × 32768** regardless of how few tiles the map actually uses — a
+full-size PNG built entirely in memory. There is no crop or scale parameter. For
+a report, fetch tiles individually and composite to the bounding box you need.
+
+Two source-level cautions:
+
+- `CompileMap` only handles layers 0–4. **Layer 5 produces an empty image
+  list**, and `Image.Arrayjoin` on an empty array throws → 500.
+- Inside the tile loop, a tile that fails to read (`GetFileByID` null, or a BLP
+  that will not decode) is logged and `continue`d **without appending a
+  placeholder**, while an absent tile (`fdid == 0`) does append one. The
+  array-join is positional, so one unreadable tile shifts every subsequent tile
+  one cell. A visibly skewed map means read failures, not map data.
+
+### World-map art, for reference
+
+There is no route for "the world map image of zone X". `maps/worldmap.html`
+assembles it from ordinary DB2 routes plus `/casc/blp2png`:
+
+```
+UiMap.ID
+  -> UiMapXMapArt (UiMapID -> UiMapArtID)
+     -> UiMapArtTile    (UiMapArtID -> FileDataID, RowIndex, ColIndex)
+     -> UiMapArt        -> UiMapArtStyleLayer (TileWidth, TileHeight)
+     -> WorldMapOverlay (UiMapArtID, OffsetX, OffsetY)
+        -> WorldMapOverlayTile (WorldMapOverlayID -> FileDataID, Row/ColIndex)
+```
+
+It loads each of those with `/dbc/header/<table>` plus
+`/dbc/data/<table>?…&useHotfixes=true&length=100000` (`worldmap.html:129`,
+`:136`). Replicating that chain is the way to get zone maps into a report.
+
+---
+
+## Column metadata — enums, flags, colours
+
+WoWDBDefs' `meta/` tree **is** exposed over HTTP, so there is no need to parse
+`.dbdm` / `.dbde` / `.dbdf` ourselves.
+
+### Where the definitions come from
+
+`Providers/EnumProvider.cs:16`. On startup:
+
+```
+SettingsManager.DefinitionDir + "/../meta/mapping.dbdm"
+  exists  -> FilesystemEnumProvider, reads the local clone
+  missing -> isUsingBDBD = true, downloads the remote BDBD blob instead
+```
+
+With `definitionDir` pointed at `vendor/WoWDBDefs/definitions`, that resolves to
+`vendor/WoWDBDefs/meta/mapping.dbdm`, which the clone does ship. The fallback is
+**silent** — the same failure mode CLAUDE.md records for `definitionDir` itself.
+Confirm it from the numbers: the local file holds **606 mappings** (44 `COLOR`,
+297 `ENUM`, 265 `FLAGS`) referencing **354 distinct** definition files
+(169 `.dbde` + 187 `.dbdf` on disk). Those are the baseline metrics in
+CLAUDE.md, so a `getMappings` response that does not total 606 means WTL fell
+back to BDBD.
+
+`MetaType` serialises as an **integer**: `FLAGS = 0`, `ENUM = 1`, `COLOR = 2`
+(`DBDefsLib/Constants/MetaType.cs`). The `// null for Color/Date (meta 2/3)`
+comment in `MetaController.cs` is stale — there is no meta 3 in this version.
+
+### All mappings — `GET /dbc/meta/getMappings`
+
+`MetaController.cs:26`.
+
+| Param | Type | Default |
+|---|---|---|
+| `tableName` | string? | null = every table |
+| `build` | string? | null = no entry filtering |
+
+Returns an array of
+
+```
+{ meta, tableName, columnName, arrIndex, conditionalTable,
+  conditionalColumn, conditionalValue, entries }
+```
+
+where `entries` is `[{ value, name, builds, buildRanges, comment }]` for `meta`
+0/1 and `null` for `meta` 2 (`COLOR`).
+
+- `tableName` is an **exact case-insensitive equality**, not a substring.
+- `entries: null` is ambiguous: it means either "this is a COLOR" or "this is an
+  ENUM/FLAGS whose `.dbde`/`.dbdf` file is missing". **Switch on `meta`, not on
+  `entries`.**
+- **The response drops `metaValue` and `comment`.** `MappingWithEntries` (bottom
+  of `MetaController.cs`) does not carry them, so the *name* of the enum a
+  column maps to (`AchievementFlags`, `WeatherType`, …) is not obtainable over
+  HTTP — only its entries. Read `meta/mapping.dbdm` directly if the report wants
+  to name the enum.
+
+> **Do not pass `build` on a 1.60.x build.** The filter is `EntryMatchesBuild` →
+> `BuildRange.Contains`, which compares componentwise:
+> `build.major >= min.major && build.major <= max.major`. Forever is
+> `1.60.1.69913`, so `major = 60`. Against the `Vanilla` preset
+> (`1.0.0.3980`–`1.12.3.6141`) that is `60 <= 12` → false; against every
+> TBC-and-later preset `expansion = 1 < 2` → false. **A 1.60.x build matches no
+> preset range that exists**, so the filter can only ever subtract.
+>
+> Currently 7 of 13,252 entry lines carry build tags, and all 7 are dropped:
+> `WeatherType` loses **all six** of its entries and comes back as
+> `entries: []`, and `SpellEffect` loses `146 ACTIVATE_RUNE`. An empty list
+> reads as "no enum defined" rather than "filtered out", because
+> `entries ??= new List<EnumEntry>()` runs before the `continue`. Omit `build`
+> and filter nothing.
+
+### One column — `GET /dbc/meta/getMeta`
+
+`MetaController.cs:74`.
+
+| Param | Type | Notes |
+|---|---|---|
+| `tableName` | string | required |
+| `columnName` | string | accepts `Name[3]`; the index is split off and used |
+
+Returns `{ metaType, entries }` or bare `null`.
+
+- **COLOR columns always return `null` here.**
+  `FilesystemEnumProvider.PopulateCache` skips `MetaType.COLOR` outright
+  (`DBCD/DBCD/Providers/FilesystemEnumProvider.cs`), so the cache never holds
+  one. `LightData::AmbientColor` is a mapped COLOR and still returns `null`.
+  **`getMappings` is the only way to learn that a column is a colour.**
+- There is **no conditional support** — the action signature takes only
+  `tableName` and `columnName`, so the `conditionalTable`/`Column`/`Value`
+  arguments the provider supports are always null. Conditional mappings are only
+  reachable through `getMappings`.
+- There is no `build` parameter, so no entry filtering — which, per above, is
+  what we want anyway.
+
+Relevant to the open `LightData` question in CLAUDE.md: 23 `LightData` columns
+are mapped `COLOR` in `mapping.dbdm`, all of them named.
+`Field_1_60_1_69876_055` is **not** among them, so the meta tree does not
+support reading it as packed RGB either. That finding stays unconfirmed.
+
+### Column headers, FKs and comments — `GET /dbc/header/{name}`
+
+`HeaderController.cs:37`. Not previously documented here, and the most useful
+route for annotating a diff.
+
+| Param | Type | Notes |
+|---|---|---|
+| `name` | string | path segment |
+| `build` | string | `?` → current build |
+
+```
+{ headers[], fks{col: "Table::Column"}, comments{col: text},
+  unverifieds[], relationsToColumns{col: [...]}, error }
+```
+
+`unverifieds` lists columns whose DBD definition is marked unverified — the
+machine-readable version of the "never assert an unknown column's meaning"
+convention. `fks` is what turns an ID column into a name in a report.
+
+> **The header shape changes when the table is empty.** With
+> `storage.Values.Count == 0` the route walks `AvailableColumns` and emits bare
+> names; with rows it walks the first row and expands arrays to `Field[0]`,
+> `Field[1]`, … (`HeaderController.cs:60` vs `:80`). Our `db2/` CSVs come from
+> `/dbc/export`, which expands arrays, so **`/dbc/header` on a 204-empty table
+> does not line up with the CSV header for that table**.
+>
+> It also uses `GetOrLoad(name, build)` — two-arg, so `useHotfixes` is **false**
+> and cannot be changed. A `hotfix_only` table such as `TimeEventData` therefore
+> loads zero rows and takes the collapsed-header path even though
+> `db2_hotfixed/TimeEventData.csv` has three rows and expanded array columns.
+
+Errors are returned as HTTP 200 with the message in `error`, like `/dbc/info`.
+
+### `GET /dbc/relations` and `GET /dbc/labelColumns`
+
+`RelationController.cs` / `LabelController.cs`. No parameters.
+
+- `/dbc/relations` → `{ "Table::Column": ["Other::Col", …] }` across all
+  definitions. `/dbc/relations/{foreignColumn}` narrows to one.
+- `/dbc/labelColumns` → a flat list of columns DBD marks as the human-readable
+  label for their table.
+
+These are the 531 / 12 in CLAUDE.md's baseline metrics. For a report, the label
+column is what to display when resolving an FK.
+
+---
+
+## Row lookup and rendered tooltips
+
+### One row — `GET /dbc/peek/{name}`
+
+`PeekController.cs:30`.
+
+| Param | Type | Default |
+|---|---|---|
+| `build` | string | `?` → current build |
+| `col` | string | column to match |
+| `val` | int | value to match |
+| `useHotfixes` | bool | `false` |
+| `pushIDs` | string | `""` — comma-separated, only honoured with `useHotfixes=true` |
+
+Returns `{ values: { "Column": "string", "Array[0]": "…" }, offset }` — the
+**first** matching row, every column stringified, arrays expanded. Enum-typed
+fields are emitted as their numeric value.
+
+- **Never 404s.** A miss is 200 with `values: {}`. An unloadable table is 200
+  with `values: { "Error": "Invalid or missing DBC \"x\"" }`, and
+  `name=filedata` is 200 with a `"Sorry"` key. Check for those keys.
+- `offset` is declared and never assigned — always 0. Ignore it.
+- `pushIDs` filters the hotfix overlay to specific pushes, which is the cheapest
+  way to answer "what did push 112132 change in this row".
+
+### All matching rows — `GET /dbc/find` and `GET /dbc/find/{name}`
+
+`FindController.cs:15` and `:127`.
+
+- `/dbc/find?name=&value=&build=&useHotfixes=` — every row where **any** column
+  (or array element) stringifies to exactly `value`. No column filter, so it is
+  a full scan of the table.
+- `/dbc/find/{name}?build=&col=&val=&useHotfixes=&calcOffset=true` — every row
+  where `col == val`.
+
+Both return a list of the same stringified-dict shape `peek` uses. Use `find`
+where `peek` would silently return only the first of several matches.
+
+### Rendered tooltips — `GET /dbc/tooltip/item/{id}`, `/dbc/tooltip/spell/{id}`
+
+`TooltipController.cs:108` and `:339`. These are the closest thing to
+"presentable" output in the API and the obvious source for a patch-note report:
+both return the icon FDID to hand to `/casc/blp2png`.
+
+`item` returns `TTItem`:
+
+```
+Name, IconFileDataID, ExpansionID, ClassID, SubClassID, InventoryType,
+ItemLevel, OverallQualityID, HasSparse, FlavorText, ItemEffects[],
+Stats[], Speed, DPS, MinDamage, MaxDamage, RequiredLevel
+```
+
+Stats are **computed**, not read — `TooltipUtils.CalculateItemStat` against
+`RandPropPoints` and the `ItemDamage*` tables. If `Item.IconFileDataID` is 0 it
+falls back through `ItemModifiedAppearance` → `ItemAppearance`.
+
+`spell` (`?level=60&difficulty=-1&mapID=-1`) returns `TTSpell`
+(`SpellID, Name, SubText, Description, IconFileDataID`) with the description run
+through `WoWTools.SpellDescParser`, so `$s1`-style tokens are resolved against
+real spell data at the given level. `IconFileDataID` defaults to `134400` (the
+question-mark icon) when `SpellMisc` has no row.
+
+> **Tooltips are never hotfixed and the build is not selectable.** Every load in
+> this controller is `GetOrLoad(name, CASC.BuildName)` — the two-argument
+> overload, which is `useHotfixes: false` (`Managers/DBCManager.cs:23`).
+> `FindRecords(…, true)` looks like a hotfix flag but the fifth parameter is
+> `single` (`DBCManager.cs:172`), and `FindRecords` itself calls the two-arg
+> `GetOrLoad`. There is no parameter to change this.
+>
+> That matters directly for finding #3 in CLAUDE.md: the 1,385 modern-ID
+> `ItemSparse` additions are **hotfix-only**, so `/dbc/tooltip/item/<id>` on any
+> of them falls through `ItemSparse` *and* `ItemSearchName` and returns
+> `Name: "Unknown Item"` with `HasSparse: false`. The route is not a usable
+> source for the PvP-rank items until they ship in the client.
+
+> **`/dbc/tooltip/item/` throws on ordinary data.** Two uncaught paths:
+> `"Item Level N not found in RandPropPoints"` and
+> `"Don't know what table to map to unknown SubClassID N"`. With no exception
+> handler in Release these are bare 500s. Do not iterate a list of item IDs
+> through this route without catching per-item failures.
+
+`/dbc/tooltip/file/{fileDataID}` returns only `{ fileDataID, filename, type }` —
+`"Unknown"` for either miss. It is cheaper than `/listfile/info` for the type,
+which that route does not return at all.
+
+`/dbc/tooltip/wex/{expression}` renders a world state expression to English via
+`WSExpressionParser`.
+
+---
+
 ## Notes for scripting
 
 - **Check `error` where it exists** (`/dbc/info`, `/dbc/data`) — those report
@@ -531,6 +981,22 @@ otherwise `useHotfixes=true` serves a stale overlay.
 - `/dbc/export` is single-threaded per request and loads the whole table into a
   `MemoryStream` before responding. Cap concurrency at ~8 per project
   convention.
+- **Release builds have no exception handler.** `Startup.cs:25` only adds
+  `UseDeveloperExceptionPage` under `IsDevelopment()`, so any unhandled throw
+  is a bare 500 with an empty body and the reason only on WTL's console. The
+  routes that throw on ordinary input are `/casc/blp2png` (non-BLP),
+  `/dbc/tooltip/item` (`RandPropPoints` / unknown `SubclassID`),
+  `/map/wdtMask?layer=6+`, `/map/download?layer=5` and `/map/list` (missing
+  `Map` columns). Catch per-item and read the console when debugging.
+- **Several routes answer failure with 200.** `/dbc/peek` returns
+  `values: {}` on a miss and an `"Error"` key on a bad table; `/dbc/header`
+  and `/dbc/info` put the message in `error`; `/dbc/find` returns `[]`;
+  `/casc/zip/fdids` hides per-file failures in an `errors.txt` entry inside
+  the zip. Status code alone is not a success check on any of them.
+- **Nothing in the image or tooltip surface is hotfix-aware.**
+  `/casc/blp2png`, `/map/*` and `/dbc/tooltip/*` all read the plain build.
+  Hotfix-only data reaches a report only through `/dbc/export`, `/dbc/data`,
+  `/dbc/peek` or `/dbc/find` with `useHotfixes=true`.
 
 ---
 
@@ -600,6 +1066,18 @@ Checked against a live WTL on `http://localhost:5080`, build `1.60.1.69913`,
 Their signatures are read from source but not exercised — the remaining cache
 and download routes mutate WTL state, so they were left alone while it was
 serving.
+
+Everything added 2026-09-20 under **Images and textures**, **Column metadata**
+and **Row lookup and rendered tooltips** is **source-read only** — no live
+instance was running. Specifically unexercised: `/casc/blp2png`, `/casc/chash`,
+`/casc/zip/fdids`, `/map/list`, `/map/tile`, `/map/wdtMask`,
+`/map/wdtMaskPuzzle`, `/map/download`, `/map/clearCache`,
+`/dbc/meta/getMappings`, `/dbc/meta/getMeta`, `/dbc/header/{name}`,
+`/dbc/relations`, `/dbc/labelColumns`, `/dbc/peek/{name}`, `/dbc/find`,
+`/dbc/tooltip/item`, `/dbc/tooltip/spell`, `/dbc/tooltip/file` and
+`/dbc/tooltip/wex`. The enum-mapping counts (606 / 44 / 297 / 265, 354 distinct
+definition files, 7 build-tagged entries of 13,252) were measured against
+`vendor/WoWDBDefs/meta/` on disk, not against a response.
 
 `/dbc/updateDefs` **was** exercised (see above) after confirming from source
 that it only clears in-memory caches.
