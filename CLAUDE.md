@@ -139,9 +139,18 @@ against a live instance on 1.60.1.69913.
 - **204 and 404 mean different things.** `204 No Content` is
   defined-but-zero-rows in this build (e.g. `modifiedcraftingitem`); `404` is
   not in this build at all. Handle them distinctly — a 204 is not a failure.
-  **The two variants of a table can disagree:** `TimeEventData` is 204 plain
-  but 200 with rows hotfixed — a table that exists *only* as live data. Do
-  not decide a table is empty from the plain request alone.
+  **The two variants of a table can disagree:** a table can return 204 with
+  `useHotfixes` off but 200 with rows when on — it exists *only* as live
+  hotfix data and was never shipped in the client build. `extract_db2.py`
+  records this as `resolution: "hotfix_only"`, distinct from `empty`.
+  `TimeEventData` in 1.60.1.69913 is the reference case, and the only one in
+  1161 tables — which is exactly why it is easy to miss. Never decide a table
+  is empty from the plain request alone.
+- **`hotfix_delta` is computed from a content hash, not row counts.** Five
+  tables in 1.60.1.69913 — `GlobalStrings`, `Light`, `LightData`,
+  `LightDataGlobalVolumeFog`, `LightParams` — have **identical row counts in
+  both variants but different values**. A count-based comparison reports no
+  change for all five.
 - **`/dbc/hotfixes/list` returns zeros when given no query string.** It
   short-circuits on `!Request.QueryString.HasValue`, so a bare request looks
   like "no hotfixes exist". Always pass `?length=N`.
