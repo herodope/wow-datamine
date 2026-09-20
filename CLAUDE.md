@@ -181,18 +181,33 @@ against a live instance on 1.60.1.69913.
   local `definitionDir` it skips the download half and only does
   reload-and-clear — which is exactly the half needed after `sync_refs.py` has
   refreshed the clone on disk.
-- **Never pass `build=` to `/dbc/meta/getMappings` or `/dbc/meta/getMeta` on a
-  1.60.x build.** The entry filter runs through `BuildRange.Contains`, which
-  compares **componentwise** rather than lexicographically:
+- **Always pass `build=` to `/dbc/meta/getMappings`.** Without it, columns
+  whose enum was re-versioned return **both** variants and the retail one
+  comes first. Measured live on 1.60.1.69913: unfiltered, exactly 2 of 606
+  mappings carry colliding values — `Weather::Type` returns 12 entries for
+  values 0–5 (retail `0 None, 1 Clear, 2 Rain…` ahead of Classic
+  `0 Clear, 1 Rain, 2 Snow…`) and `SpellEffect::Effect` returns 361 with one
+  duplicate. A decoder taking the first match on value silently labels every
+  Forever weather row with **retail** names. With `build=1.60.1.69913`:
+  **0 colliding mappings and 0 empty ENUM/FLAGS mappings** — the filter is
+  what selects the Classic-era variant.
+
+  The mechanism is worth knowing because it constrains what the filter can do.
+  `BuildRange.Contains` compares **componentwise**, not lexicographically:
   `major >= min.major && major <= max.major`. Forever is `1.60.1.69913`, so
-  `major = 60` fails `<= 12` against the `Vanilla` preset, and `expansion = 1`
+  `major = 60` fails `<= 12` against the `Vanilla` preset and `expansion = 1`
   fails `>= 2` against every TBC-and-later preset. **A 1.60.x build matches no
-  preset range that exists**, so the parameter can only ever subtract. The
-  stripped entries come back as `entries: []`, which reads as "this column has
-  no enum mapping" rather than "you passed the wrong parameter" — the same
-  silent-wrongness shape as `hotfixes=` vs `useHotfixes=`. Measured: with
-  `build=` set, `WeatherType` loses **all six** of its entries and
-  `SpellEffect` loses `146 ACTIVATE_RUNE`. Omit `build` and filter nothing.
+  preset range that exists**, so `build=` can only ever *drop* build-tagged
+  entries, never select one. That gives the right answer here only because the
+  era-specific variants are the tagged ones and the Classic defaults are
+  untagged — an authoring convention, not a guarantee. If a future definition
+  sync tags the Classic variant instead, the filter would strip it and leave
+  the column empty. **Re-run the collision check after every `sync_refs.py`:**
+  with `build=` set, no ENUM/FLAGS mapping should come back with zero entries.
+  (An earlier revision of this file said the opposite — omit `build=` — from
+  reading `WeatherType.dbde`'s six build-tagged lines without noticing the six
+  untagged ones below them, and without checking a live response. Corrected
+  2026-09-20 against a running instance.)
 - **`output=png` on `/map/tile` is read only inside the `type == "adt"`
   branch.** Every BLP falls through to the tail path, which unconditionally
   returns `application/octet-stream` holding raw RGBA bytes — `targetSize ×
@@ -201,9 +216,13 @@ against a live instance on 1.60.1.69913.
   `/casc/blp2png` for a PNG; use `/map/tile` only for pixels to composite.
 - **A 500 from WTL usually means bad input, not a dead server.**
   `Startup.cs` registers `UseDeveloperExceptionPage` only under
-  `IsDevelopment()`, so a Release build has **no exception handler at all** and
-  an unhandled throw returns a bare 500 with an empty body, the reason going
-  only to WTL's console. `/casc/blp2png` on a non-BLP, `/dbc/tooltip/item` on a
+  `IsDevelopment()`, and there is no handler registered for any other
+  environment. `launchSettings.json` sets `ASPNETCORE_ENVIRONMENT=Development`,
+  so launching through `run-wtl.ps1` (`dotnet run`) **does** get the dev
+  exception page — a 500 arrives as `text/plain` with a stack trace, which is
+  worth reading. Run the built exe without that variable and the same throw
+  returns a bare 500 with an empty body instead. Either way the reason is
+  never a structured error field. `/casc/blp2png` on a non-BLP, `/dbc/tooltip/item` on a
   `RandPropPoints` miss or unknown `SubclassID`, `/map/wdtMask` on an unknown
   layer and `/map/download?layer=5` all reach it. Scripts must treat 500 as
   possible bad input and keep going, not as "WTL is down" — probe

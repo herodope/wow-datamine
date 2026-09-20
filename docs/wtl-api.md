@@ -560,14 +560,20 @@ casing works.
 - **404 has two meanings.** `CASC.GetFileByID` returning null is one; the other
   is the **encryption probe** — the route reads the first 4 bytes and returns
   `NotFound()` if all four are zero. An encrypted file whose key is missing
-  decodes to zeros, so it 404s rather than erroring. Treat a 404 here as
-  "unavailable", not "does not exist", and cross-check the `encryptionStatus`
-  column on `/listfile/files` before reporting a file as absent.
-- **Not a BLP → 500 with an empty body.** There is no format check;
-  `new BLPFile(stream)` on a non-BLP throws, and `Startup.cs:25` only installs
-  `UseDeveloperExceptionPage` under `IsDevelopment()`. Running `-c Release`
-  there is no exception handler at all, so an unhandled throw is a bare 500.
-  Check `content_type` before calling.
+  decodes to zeros, so it 404s rather than erroring. ✅ measured: FDIDs 2144058
+  and 2147641 (both `EncryptedUnknownKey`, both `blp`) return 404 from
+  `blp2png` while `/casc/fdid` returns **200 with 175,948 and 350,724 bytes**
+  of undecryptable data. An `EncryptedButNot` file (2147636) renders normally.
+  Treat a 404 here as "unavailable", not "does not exist", and cross-check the
+  `encrypted` column in `files.csv` before reporting a texture as absent.
+- **Not a BLP → 500.** ✅ measured: FDID 1100087 returns HTTP 500. There is no
+  format check; `new BLPFile(stream)` on a non-BLP throws. `Startup.cs:25`
+  installs `UseDeveloperExceptionPage` only under `IsDevelopment()` and nothing
+  for other environments — but `launchSettings.json` sets
+  `ASPNETCORE_ENVIRONMENT=Development`, so under `run-wtl.ps1` (`dotnet run`)
+  the 500 arrives as `text/plain` with a readable stack trace. Run the built
+  exe without that variable and it is a bare 500 with an empty body. Check
+  `content_type` before calling either way.
 
 ### Raw file bytes — `GET /casc/fdid`, `GET /casc/chash`
 
@@ -678,8 +684,10 @@ always 0 on that path. Do not read anything into a zero there.
 > consulted inside the `type == "adt"` branch (`MapController.cs:178`). Every
 > BLP goes down the tail path, which unconditionally returns
 > `application/octet-stream` holding **raw RGBA bytes** — `targetSize ×
-> targetSize × 4`, no header. Asking for `output=png` on a minimap tile returns
-> 200 with raw pixels that no image decoder will open. Use `/casc/blp2png` when
+> targetSize × 4`, no header. ✅ measured:
+> `/map/tile?fileDataID=135274&targetSize=256&output=png` returns HTTP 200,
+> `application/octet-stream`, **exactly 262144 bytes** = 256 × 256 × 4 — raw
+> pixels that no image decoder will open. Use `/casc/blp2png` when
 > you want a PNG, and `/map/tile` only when you want pixels to composite
 > yourself.
 
@@ -787,20 +795,37 @@ where `entries` is `[{ value, name, builds, buildRanges, comment }]` for `meta`
   HTTP — only its entries. Read `meta/mapping.dbdm` directly if the report wants
   to name the enum.
 
-> **Do not pass `build` on a 1.60.x build.** The filter is `EntryMatchesBuild` →
-> `BuildRange.Contains`, which compares componentwise:
+> **Pass `build`.** ✅ measured 2026-09-20 against 1.60.1.69913.
+>
+> | | mappings | colliding values | empty ENUM/FLAGS |
+> |---|---|---|---|
+> | no `build=` | 606 | **2** | 0 |
+> | `build=1.60.1.69913` | 606 | **0** | 0 |
+>
+> The two collisions unfiltered are `Weather::Type` — 12 entries covering
+> values 0–5 twice, retail (`0 None, 1 Clear, 2 Rain, 3 Snow, 4 Sandstorm,
+> 5 Miscellaneous`) ahead of Classic (`0 Clear, 1 Rain, 2 Snow, 3 Sandstorm,
+> 4 Miscellaneous, 5 Fire`) — and `SpellEffect::Effect`, 361 entries with one
+> duplicate. **A decoder taking the first entry matching a value labels every
+> Forever weather row with retail names.** `build=` removes the collision and
+> leaves the Classic set.
+>
+> The mechanism constrains what the filter can do, so it is worth stating.
+> `EntryMatchesBuild` → `BuildRange.Contains` compares componentwise:
 > `build.major >= min.major && build.major <= max.major`. Forever is
 > `1.60.1.69913`, so `major = 60`. Against the `Vanilla` preset
 > (`1.0.0.3980`–`1.12.3.6141`) that is `60 <= 12` → false; against every
 > TBC-and-later preset `expansion = 1 < 2` → false. **A 1.60.x build matches no
-> preset range that exists**, so the filter can only ever subtract.
->
-> Currently 7 of 13,252 entry lines carry build tags, and all 7 are dropped:
-> `WeatherType` loses **all six** of its entries and comes back as
-> `entries: []`, and `SpellEffect` loses `146 ACTIVATE_RUNE`. An empty list
-> reads as "no enum defined" rather than "filtered out", because
-> `entries ??= new List<EnumEntry>()` runs before the `continue`. Omit `build`
-> and filter nothing.
+> preset range that exists**, so `build=` can only ever *drop* tagged entries,
+> never select one. Currently 7 of 13,252 entry lines carry build tags (6 in
+> `WeatherType.dbde`, 1 in `SpellEffect.dbde`) and all 7 are dropped — which is
+> the correct result only because the era-specific variants are the tagged ones
+> and the Classic defaults sit untagged below them. That is an authoring
+> convention, not a guarantee: if a sync ever tags the Classic variant, the
+> filter would strip it and `entries ??= new List<EnumEntry>()` running before
+> the `continue` would return `entries: []`, which reads as "no enum defined"
+> rather than "filtered out". **After every `sync_refs.py`, re-check that no
+> ENUM/FLAGS mapping returns zero entries with `build=` set.**
 
 ### One column — `GET /dbc/meta/getMeta`
 
@@ -869,11 +894,17 @@ Errors are returned as HTTP 200 with the message in `error`, like `/dbc/info`.
 
 - `/dbc/relations` → `{ "Table::Column": ["Other::Col", …] }` across all
   definitions. `/dbc/relations/{foreignColumn}` narrows to one.
-- `/dbc/labelColumns` → a flat list of columns DBD marks as the human-readable
-  label for their table.
+- `/dbc/labelColumns` → a flat list of `Table::LabelID` columns.
 
-These are the 531 / 12 in CLAUDE.md's baseline metrics. For a report, the label
-column is what to display when resolving an FK.
+These are the 531 / 12 in CLAUDE.md's baseline metrics.
+
+> **`labelColumns` is not "the display name column per table".** ✅ measured:
+> it returns 12 entries, all of the form `SpellLabel::LabelID`,
+> `CreatureLabel::LabelID`, `QuestLabel::LabelID` — columns participating in
+> WoW's gameplay *Label* system, not human-readable names. There is no route
+> that says "display `MapName_lang` for a `Map::ID`". A report resolving FKs
+> to names needs its own per-table registry; `scripts/enrich.py` keeps one in
+> `LABELS`.
 
 ---
 
@@ -946,11 +977,17 @@ question-mark icon) when `SpellMisc` has no row.
 > `single` (`DBCManager.cs:172`), and `FindRecords` itself calls the two-arg
 > `GetOrLoad`. There is no parameter to change this.
 >
-> That matters directly for finding #3 in CLAUDE.md: the 1,385 modern-ID
-> `ItemSparse` additions are **hotfix-only**, so `/dbc/tooltip/item/<id>` on any
-> of them falls through `ItemSparse` *and* `ItemSearchName` and returns
-> `Name: "Unknown Item"` with `HasSparse: false`. The route is not a usable
-> source for the PvP-rank items until they ship in the client.
+> That matters directly for finding #3 in CLAUDE.md. ✅ measured: of 4,218
+> hotfix-only `ItemSparse` rows, `/dbc/tooltip/item/720` and `/item/286554`
+> both return **HTTP 200** with `name: "Unknown Item"`, `hasSparse: false`,
+> while `/item/25` gives `"Worn Shortsword"` and `/item/19019` gives
+> `"Thunderfury, Blessed Blade of the Windseeker"`. A 200 with a plausible
+> shape is the whole problem — the route is not a usable source for hotfix-only
+> items until they ship in the client. Note the **icon still resolves**
+> (132939, 133358), because `Item.db2` ships and carries `IconFileDataID`.
+>
+> The JSON is serialised **camelCase** (`name`, `hasSparse`,
+> `iconFileDataID`), not the PascalCase the C# struct declares.
 
 > **`/dbc/tooltip/item/` throws on ordinary data.** Two uncaught paths:
 > `"Item Level N not found in RandPropPoints"` and
@@ -1067,17 +1104,29 @@ Their signatures are read from source but not exercised — the remaining cache
 and download routes mutate WTL state, so they were left alone while it was
 serving.
 
-Everything added 2026-09-20 under **Images and textures**, **Column metadata**
-and **Row lookup and rendered tooltips** is **source-read only** — no live
-instance was running. Specifically unexercised: `/casc/blp2png`, `/casc/chash`,
-`/casc/zip/fdids`, `/map/list`, `/map/tile`, `/map/wdtMask`,
-`/map/wdtMaskPuzzle`, `/map/download`, `/map/clearCache`,
-`/dbc/meta/getMappings`, `/dbc/meta/getMeta`, `/dbc/header/{name}`,
-`/dbc/relations`, `/dbc/labelColumns`, `/dbc/peek/{name}`, `/dbc/find`,
-`/dbc/tooltip/item`, `/dbc/tooltip/spell`, `/dbc/tooltip/file` and
-`/dbc/tooltip/wex`. The enum-mapping counts (606 / 44 / 297 / 265, 354 distinct
-definition files, 7 build-tagged entries of 13,252) were measured against
-`vendor/WoWDBDefs/meta/` on disk, not against a response.
+The 2026-09-20 additions were first written source-read only. A second pass the
+same day exercised these against a live instance on 1.60.1.69913:
+
+| Route | Result |
+|---|---|
+| `GET /dbc/meta/getMappings` | 606 mappings, 10.3 MB; `meta` counts 44 / 297 / 265 match `mapping.dbdm` exactly, so the filesystem provider is in use |
+| `GET /dbc/meta/getMappings?build=…` | 606 mappings, **0** colliding values vs **2** unfiltered — see the corrected guidance above |
+| `GET /dbc/header/Achievement` | 19 headers, 9 `fks`, 2 `unverifieds` (`HiddenBeforeDisplaySeason`, `LegacyAfterTimeEvent`), `Instance_ID → Map::ID` |
+| `GET /dbc/header/AreaTriggerBox` | `['ID', 'Extents']` — array column collapsed, empty-table path confirmed |
+| `GET /dbc/tooltip/item/{id}` ×4 | hotfix-only 720 / 286554 → `"Unknown Item"`; shipped 25 / 19019 resolve |
+| `GET /casc/blp2png` ×5 | 200 `image/png` on an icon; **404** on two `EncryptedUnknownKey` BLPs; **500** on a non-BLP |
+| `GET /casc/fdid` | 200 with bytes for the same encrypted FDIDs `blp2png` 404s on |
+| `GET /map/tile?…&output=png` | 200 `application/octet-stream`, 262144 bytes = 256×256×4 |
+
+**Corrected by that pass:** the `build=` guidance on `/dbc/meta/getMappings`
+was originally written backwards — "omit it" — from reading
+`WeatherType.dbde`'s six build-tagged lines without noticing the six untagged
+lines below them. The live response settled it.
+
+Still source-read only: `/casc/chash`, `/casc/zip/fdids`, `/map/list`,
+`/map/wdtMask`, `/map/wdtMaskPuzzle`, `/map/download`, `/map/clearCache`,
+`/dbc/meta/getMeta`, `/dbc/relations`, `/dbc/labelColumns`, `/dbc/peek/{name}`,
+`/dbc/find`, `/dbc/tooltip/spell`, `/dbc/tooltip/file` and `/dbc/tooltip/wex`.
 
 `/dbc/updateDefs` **was** exercised (see above) after confirming from source
 that it only clears in-memory caches.
