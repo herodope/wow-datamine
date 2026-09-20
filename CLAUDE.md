@@ -167,6 +167,28 @@ and CDN-only builds that WTL will not load.
 
 ---
 
+## Prerequisites
+
+| | |
+|---|---|
+| Python | 3.10+ — `mcp` requires it; the scripts themselves are 3.9-compatible |
+| .NET | whatever `vendor/wow.tools.local` needs to build (`dotnet run -c Release`) |
+| Python packages | `pip install -r requirements.txt` |
+
+**`requirements.txt` has exactly one entry.** The pipeline is deliberately
+stdlib-only — extraction, diffing, enrichment, `build_db.py`, the HTML
+renderer and `query.py` use nothing but `urllib`, `sqlite3`, `csv`, `json`,
+`hashlib` and `concurrent.futures`. Audited across all 16 scripts: `mcp` is
+the single third-party import in the repo, and it is needed only by
+`scripts/mcp_server.py`.
+
+Keep it that way. It means the pipeline runs on a bare Python with no install
+step, and a broken dependency can only ever take out the MCP server — never an
+extraction on patch day, which is the one thing that cannot be repeated later
+once Blizzard rotates a build off the version list.
+
+---
+
 ## Running WTL
 
 ```powershell
@@ -804,6 +826,7 @@ apply to the libraries.
 ├── .claude/skills/wow-query/SKILL.md   # how to query wow.db, and the rules
 ├── README.md
 ├── builds.json              # manifest index — buildConfig/cdnConfig per build
+├── requirements.txt         # one entry: mcp. everything else is stdlib
 ├── scripts/
 │   ├── config.py            # product code, paths, build filter — SINGLE SOURCE
 │   ├── run-wtl.ps1          # launch WTL from the correct working directory
@@ -912,9 +935,10 @@ and that a missing table usually means "not in this build".
 ### MCP server
 
 `scripts/mcp_server.py` exposes the same database over MCP stdio, for clients
-that cannot run `query.py` themselves. Needs `pip install mcp`.
+that cannot run `query.py` themselves.
 
 Four tools: `list_tables`, `describe_table`, `query`, `get_conventions`.
+Install with `pip install -r requirements.txt` — see **Prerequisites**.
 
 - Read-only is the **driver's** guarantee, not a SQL check: the connection is
   a `file:...?mode=ro` URI, and `ATTACH` is additionally denied by an

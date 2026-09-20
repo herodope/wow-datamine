@@ -1,0 +1,23 @@
+# Python dependencies for scripts/.
+#
+# The pipeline is deliberately stdlib-only. Everything below the MCP line is
+# empty on purpose: extraction, diffing, enrichment, the SQLite build, the
+# HTML renderer and the query CLI use nothing but the standard library
+# (urllib, sqlite3, csv, json, hashlib, concurrent.futures). Audited across
+# all 16 scripts -- `mcp` is the single third-party import in the repo.
+#
+# That is worth keeping. It means the pipeline runs on a bare Python with no
+# install step, and a dependency that breaks can only ever break the MCP
+# server, never an extraction on patch day.
+#
+#     pip install -r requirements.txt
+#
+# Python 3.10+ (mcp requires it; the scripts themselves are 3.9-compatible).
+
+# MCP server only -- scripts/mcp_server.py. Not needed for extraction,
+# diffing, reporting, build_db.py or query.py.
+#
+# Pinned to 2.x deliberately: 2.0 renamed FastMCP to MCPServer
+# (from mcp.server.mcpserver import MCPServer). Code written against 1.x will
+# not import, and examples found online are usually 1.x.
+mcp>=2.0,<3
