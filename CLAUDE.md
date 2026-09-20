@@ -205,6 +205,43 @@ Log and continue. Only investigate if the set changes between builds.
 
 ---
 
+## Retail contamination
+
+`wow_classic_beta` is a recycled product code and Forever shares tooling with
+retail, so retail-era rows leak into tables that should hold only Classic
+content. They get pruned over time. **Track them per build: a new one appearing
+is a signal, and one disappearing tells you Blizzard noticed.**
+
+`scripts/contamination.py` runs as part of the hotfix report. Rules, ranked by
+how much they actually discriminate:
+
+| Rule | Confidence | What it catches |
+|---|---|---|
+| `dangling_map_ref` | HIGH | A row references a Map ID absent from this build. Exactly 1 of 233 `Achievement` rows hits this — near-zero false positives |
+| `light_absent_map` | HIGH | A `LightParams` ID whose only referencing `Light` rows sit on absent maps |
+| `orphan_removal` | MEDIUM | Rows pulled together in one push that carry no supporting display data |
+
+**Two rules deliberately not implemented**, because measurement showed they do
+not discriminate in this build:
+
+- **ID falls in a "modern retail range".** `Achievement` IDs run 627–64159 with
+  160 of 233 rows above 61000, so an ID-range test flags most of the table. ID
+  ranges are supporting evidence only, never a trigger.
+- **Item row has no ItemSparse/ItemSearchName data.** 8,286 of 31,675 `Item`
+  rows lack display data, because `ItemSparse` ships incomplete and arrives by
+  hotfix. Orphanhood alone would flag a quarter of the table. What is
+  suspicious is a **coordinated removal** of orphans in a single push.
+
+### Known cases in 1.60.1.69913
+
+| Record | Evidence | Push |
+|---|---|---|
+| `Achievement` 9275 — "Warlord Zaela kills (Upper Blackrock Spire)" | `Instance_ID` 1358, a map not in this build. Warlord Zaela is a Warlords of Draenor boss. Removed together with its `Achievement_Category` 15233 | 112039, invalidated |
+| `LightParams` 453 | Referenced only by `Light` 16161 on map 3064, which does not exist here. Replaced by 7641 (Kalimdor) in `Light` 269 | 112132, valid |
+| 75 `Item` stubs | All `ClassID` 4 / `SubclassID` 0 — 32 trinkets, 23 rings, 20 necks — with no display data, pulled in one push | 112078, invalidated |
+
+---
+
 ## Key facts
 
 - **FDIDs share the retail namespace.** `wowdev/wow-listfile` applies directly.
@@ -338,6 +375,20 @@ regions but `cn` can lag or diverge.
   delta. Always key on the column literally named `ID`, fall back to column 0
   only when absent, and state which key was used in the output. This applies
   to `diff_builds.py` as much as to `diff_hotfixes.py`.
+- **Treat push IDs of `2^24 + recordID` as synthetic.** Not every push ID in
+  the hotfix table is a real push. IDs equal to `16777216 + recordID` are
+  derived arithmetically from the record ID by a bulk-injection path, and
+  counting them as distinct pushes invents authoring events that never
+  happened — the 4,218 `ItemSparse` additions in 1.60.1.69913 produce 4,218
+  phantom "pushes" that way, which reads as incremental authoring when it was
+  a single bulk load. **Real pushes for this build are in the 112xxx range;
+  anything above ~16.7M is generated.** Label those records
+  `bulk injection (N records, no real push attribution)` and report genuine
+  push IDs separately. The two overlap: the hotfix table holds 4,218 synthetic
+  and 194 real records for each of `ItemSparse` and `ItemSearchName`, but only
+  114 of the real ones (all in `ItemSparse`) attach to rows the diff sees as
+  added — those 114 were bulk-loaded *and* later hotfixed for real. Re-verify
+  the base if a future build changes the scheme.
 - **Cap concurrency at ~8.** CASC reads are IO-bound; oversubscribing thrashes
   the disk.
 

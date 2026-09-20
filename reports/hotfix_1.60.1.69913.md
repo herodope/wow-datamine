@@ -2,7 +2,7 @@
 
 Live hotfix data versus the DB2s as shipped in the client. Both sides come from the same build, so every difference here is something Blizzard changed **without a client patch**.
 
-Generated 2026-09-20T00:55:19+00:00
+Generated 2026-09-20T01:15:44+00:00
 
 | | |
 |---|---|
@@ -11,7 +11,21 @@ Generated 2026-09-20T00:55:19+00:00
 | Rows removed | 77 |
 | Rows changed | 33 |
 | Hotfix records known to WTL | 26,542 |
+| Distinct real push IDs | 13 |
+| Records with only a synthetic push ID | 8,038 |
 | Tables extracted | 1161 |
+
+---
+
+## Retail contamination
+
+Rows that look like retail-era data in a Classic+ build. `wow_classic_beta` is a recycled product code and Forever shares tooling with retail, so these turn up and get pruned over time — a **new** one appearing is itself a signal.
+
+| Confidence | Rule | Table | Record | Detail |
+|---|---|---|---|---|
+| HIGH | `dangling_map_ref` | `Achievement` | `9275` | Instance_ID = 1358, a map not present in this build |
+| HIGH | `light_absent_map` | `LightParams` | `453` | replaced in Light 269.LightParamsID[2]; referenced only by Light 16161 on map(s) 3064 absent from this build |
+| MEDIUM | `orphan_removal` | `Item` | `75 rows` | 75 removed rows have no ItemSparse/ItemSearchName data (ClassID 4/SubclassID 0 × 75; InventoryType 12 × 32, InventoryType 11 × 23, InventoryType 2 × 20). Orphanhood alone is NOT a signal — 8,286 of 31,675 Item rows lack display data in this build, because ItemSparse ships incomplete and arrives by hotfix. The signal is that these were pulled together in one push. |
 
 ---
 
@@ -19,8 +33,8 @@ Generated 2026-09-20T00:55:19+00:00
 
 | Table | Added | Removed | Changed | Plain → Hotfixed | Push IDs |
 |---|--:|--:|--:|---|---|
-| `ItemSparse` | 4,218 | 0 | 5 | 19,171 → 23,389 | 112078, 112129, 112144, 112145 +2002 |
-| `ItemSearchName` | 3,934 | 0 | 0 | 6,621 → 10,555 | 16777936, 16777943, 16777970, 16778005 +1996 |
+| `ItemSparse` | 4,218 | 0 | 5 | 19,171 → 23,389 | bulk injection (4,104 records, no real push attribution); real: 112078, 112129, 112144, 112145 +2 |
+| `ItemSearchName` | 3,934 | 0 | 0 | 6,621 → 10,555 | bulk injection (3,934 records, no real push attribution) |
 | `Item` | 0 | 75 | 0 | 31,675 → 31,600 | 112078 |
 | `BroadcastText` | 30 | 0 | 0 | 12 → 42 | 112142 |
 | `LightData` | 0 | 0 | 16 | 5,375 → 5,375 | 112132 |
@@ -45,31 +59,31 @@ Generated 2026-09-20T00:55:19+00:00
 
 | ID | Push ID | First fields |
 |---|---|---|
-| `720` | 16777936 (valid) | — |
-| `727` | 16777943 (valid) | — |
-| `754` | 16777970 (valid) | — |
-| `789` | 16778005 (valid) | — |
-| `790` | 16778006 (valid) | — |
-| `791` | 16778007 (valid) | — |
-| `816` | 16778032 (valid) | — |
-| `820` | 16778036 (valid) | — |
-| `821` | 16778037 (valid) | — |
-| `826` | 16778042 (valid) | — |
-| `827` | 16778043 (valid) | — |
-| `832` | 16778048 (valid) | — |
-| `863` | 16778079 (valid) | — |
-| `865` | 16778081 (valid) | — |
-| `866` | 16778082 (valid) | — |
-| `867` | 16778083 (valid) | — |
-| `870` | 16778086 (valid) | — |
-| `872` | 16778088 (valid) | — |
-| `873` | 16778089 (valid) | — |
-| `880` | 16778096 (valid) | — |
-| `885` | 16778101 (valid) | — |
-| `888` | 16778104 (valid) | — |
-| `890` | 16778106 (valid) | — |
-| `892` | 16778108 (valid) | — |
-| `899` | 16778115 (valid) | — |
+| `720` | *bulk* | — |
+| `727` | *bulk* | — |
+| `754` | *bulk* | — |
+| `789` | *bulk* | — |
+| `790` | *bulk* | — |
+| `791` | *bulk* | — |
+| `816` | *bulk* | — |
+| `820` | *bulk* | — |
+| `821` | *bulk* | — |
+| `826` | *bulk* | — |
+| `827` | *bulk* | — |
+| `832` | *bulk* | — |
+| `863` | *bulk* | — |
+| `865` | *bulk* | — |
+| `866` | *bulk* | — |
+| `867` | *bulk* | — |
+| `870` | *bulk* | — |
+| `872` | *bulk* | — |
+| `873` | *bulk* | — |
+| `880` | *bulk* | — |
+| `885` | *bulk* | — |
+| `888` | *bulk* | — |
+| `890` | *bulk* | — |
+| `892` | *bulk* | — |
+| `899` | *bulk* | — |
 | … | | *4,193 more* |
 
 ### Changed (5)
@@ -115,31 +129,31 @@ Generated 2026-09-20T00:55:19+00:00
 
 | ID | Push ID | First fields |
 |---|---|---|
-| `720` | 16777936 (valid) | Brawler Gloves · 3 · 0 |
-| `727` | 16777943 (valid) | Notched Shortsword · 2 · 0 |
-| `754` | 16777970 (valid) | Shortsword of Vengeance · 3 · 0 |
-| `789` | 16778005 (valid) | Stout Battlehammer · 2 · 0 |
-| `790` | 16778006 (valid) | Forester's Axe · 2 · 0 |
-| `791` | 16778007 (valid) | Gnarled Ash Staff · 3 · 0 |
-| `816` | 16778032 (valid) | Small Hand Blade · 2 · 0 |
-| `820` | 16778036 (valid) | Slicer Blade · 2 · 0 |
-| `821` | 16778037 (valid) | Riverpaw Leather Vest · 2 · 0 |
-| `826` | 16778042 (valid) | Brutish Riverpaw Axe · 2 · 0 |
-| `827` | 16778043 (valid) | Wicked Blackjack · 2 · 0 |
-| `832` | 16778048 (valid) | Silver Defias Belt · 2 · 0 |
-| `863` | 16778079 (valid) | Gloom Reaper · 2 · 0 |
-| `865` | 16778081 (valid) | Leaden Mace · 2 · 0 |
-| `866` | 16778082 (valid) | Monk's Staff · 2 · 0 |
-| `867` | 16778083 (valid) | Gloves of Holy Might · 4 · 0 |
-| `870` | 16778086 (valid) | Fiery War Axe · 4 · 0 |
-| `872` | 16778088 (valid) | Rockslicer · 3 · 0 |
-| `873` | 16778089 (valid) | Staff of Jordan · 4 · 0 |
-| `880` | 16778096 (valid) | Staff of Horrors · 2 · 0 |
-| `885` | 16778101 (valid) | Black Metal Axe · 2 · 0 |
-| `888` | 16778104 (valid) | Naga Battle Gloves · 3 · 0 |
-| `890` | 16778106 (valid) | Twisted Chanter's Staff · 3 · 0 |
-| `892` | 16778108 (valid) | Gnoll Casting Gloves · 2 · 0 |
-| `899` | 16778115 (valid) | Venom Web Fang · 2 · 0 |
+| `720` | *bulk* | Brawler Gloves · 3 · 0 |
+| `727` | *bulk* | Notched Shortsword · 2 · 0 |
+| `754` | *bulk* | Shortsword of Vengeance · 3 · 0 |
+| `789` | *bulk* | Stout Battlehammer · 2 · 0 |
+| `790` | *bulk* | Forester's Axe · 2 · 0 |
+| `791` | *bulk* | Gnarled Ash Staff · 3 · 0 |
+| `816` | *bulk* | Small Hand Blade · 2 · 0 |
+| `820` | *bulk* | Slicer Blade · 2 · 0 |
+| `821` | *bulk* | Riverpaw Leather Vest · 2 · 0 |
+| `826` | *bulk* | Brutish Riverpaw Axe · 2 · 0 |
+| `827` | *bulk* | Wicked Blackjack · 2 · 0 |
+| `832` | *bulk* | Silver Defias Belt · 2 · 0 |
+| `863` | *bulk* | Gloom Reaper · 2 · 0 |
+| `865` | *bulk* | Leaden Mace · 2 · 0 |
+| `866` | *bulk* | Monk's Staff · 2 · 0 |
+| `867` | *bulk* | Gloves of Holy Might · 4 · 0 |
+| `870` | *bulk* | Fiery War Axe · 4 · 0 |
+| `872` | *bulk* | Rockslicer · 3 · 0 |
+| `873` | *bulk* | Staff of Jordan · 4 · 0 |
+| `880` | *bulk* | Staff of Horrors · 2 · 0 |
+| `885` | *bulk* | Black Metal Axe · 2 · 0 |
+| `888` | *bulk* | Naga Battle Gloves · 3 · 0 |
+| `890` | *bulk* | Twisted Chanter's Staff · 3 · 0 |
+| `892` | *bulk* | Gnoll Casting Gloves · 2 · 0 |
+| `899` | *bulk* | Venom Web Fang · 2 · 0 |
 | … | | *3,909 more* |
 
 ---

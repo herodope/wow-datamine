@@ -33,12 +33,17 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 import config
+import contamination
 
 USER_AGENT = "wow-datamine/1.0 (+local datamining pipeline)"
 HOTFIX_TIMEOUT = 600
 PROBE_TIMEOUT = 10
 
 CELL_LIMIT = 70  # truncate long field values in the report
+
+# Push IDs of the form SYNTHETIC_PUSH_BASE + recordID are generated from the
+# record ID rather than issued by a real push. See split_pushes().
+SYNTHETIC_PUSH_BASE = 1 << 24  # 16,777,216
 
 csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 
@@ -199,18 +204,84 @@ def diff_table(table, plain_dir, hotfixed_dir):
 # --- Report -----------------------------------------------------------------
 
 
-def attribution_for(index, table, key):
+def split_pushes(index, table, key):
+    """(real_pairs, synthetic_count) for one record.
+
+    Push IDs equal to SYNTHETIC_PUSH_BASE + recordID are derived arithmetically
+    from the record ID, not issued by a real hotfix push. Counting them as
+    distinct pushes invents authoring events that never happened -- 4,218
+    ItemSparse additions in 1.60.1.69913 produce 4,218 phantom "pushes" that
+    way. Real pushes for this build sit in the 112xxx range.
+    """
     try:
-        entries = index.get((table.lower(), int(key)), [])
+        record_id = int(key)
     except ValueError:
-        return ""
-    if not entries:
-        return ""
-    pairs = sorted({(push, status) for push, status, _detected in entries})
-    return ", ".join(f"{push} ({status_label(status)})" for push, status in pairs)
+        return [], 0
+    entries = index.get((table.lower(), record_id), [])
+    real, synthetic = set(), 0
+    for push, status, _detected in entries:
+        if push == SYNTHETIC_PUSH_BASE + record_id:
+            synthetic += 1
+        else:
+            real.add((push, status))
+    return sorted(real), synthetic
 
 
-def render(build, results, index, hotfix_rows, max_rows, manifest):
+def attribution_for(index, table, key):
+    """Per-row cell: real pushes if any, otherwise mark it as bulk."""
+    real, synthetic = split_pushes(index, table, key)
+    if real:
+        return ", ".join(f"{push} ({status_label(status)})" for push, status in real)
+    return "*bulk*" if synthetic else ""
+
+
+def summarize_pushes(index, table, keys):
+    """Summary cell for a whole table."""
+    real, bulk_records = set(), 0
+    for key in keys:
+        r, synthetic = split_pushes(index, table, key)
+        real.update(p for p, _s in r)
+        if synthetic and not r:
+            bulk_records += 1
+
+    parts = []
+    if bulk_records:
+        parts.append(f"bulk injection ({bulk_records:,} records, no real push attribution)")
+    if real:
+        shown = ", ".join(str(p) for p in sorted(real)[:4])
+        if len(real) > 4:
+            shown += f" +{len(real) - 4}"
+        parts.append(f"real: {shown}" if bulk_records else shown)
+    return "; ".join(parts) or "—"
+
+
+def render_contamination(findings):
+    """Suspected retail leftovers, highest confidence first."""
+    L = ["## Retail contamination", ""]
+    if not findings:
+        L += ["No suspected retail contamination detected in this diff.", "", "---", ""]
+        return L
+
+    L.append(
+        "Rows that look like retail-era data in a Classic+ build. `wow_classic_beta` "
+        "is a recycled product code and Forever shares tooling with retail, so these "
+        "turn up and get pruned over time — a **new** one appearing is itself a signal."
+    )
+    L.append("")
+    L.append("| Confidence | Rule | Table | Record | Detail |")
+    L.append("|---|---|---|---|---|")
+    for f in findings:
+        L.append(
+            f"| {f['confidence'].upper()} | `{f['rule']}` | `{f['table']}` | "
+            f"`{f['record']}` | {f['detail']} |"
+        )
+    L.append("")
+    L.append("---")
+    L.append("")
+    return L
+
+
+def render(build, results, index, hotfix_rows, max_rows, manifest, findings=None):
     L = []
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -235,11 +306,23 @@ def render(build, results, index, hotfix_rows, max_rows, manifest):
     L.append(f"| Rows removed | {total_removed:,} |")
     L.append(f"| Rows changed | {total_changed:,} |")
     L.append(f"| Hotfix records known to WTL | {hotfix_rows:,} |")
+
+    real_pushes, bulk_records = set(), 0
+    for r in results:
+        for key in list(r["added"]) + list(r["removed"]) + [k for k, _ in r["changed"]]:
+            rp, synthetic = split_pushes(index, r["table"], key)
+            real_pushes.update(p for p, _s in rp)
+            if synthetic and not rp:
+                bulk_records += 1
+    L.append(f"| Distinct real push IDs | {len(real_pushes):,} |")
+    L.append(f"| Records with only a synthetic push ID | {bulk_records:,} |")
     if manifest:
         L.append(f"| Tables extracted | {manifest.get('totals', {}).get('tables', '?')} |")
     L.append("")
     L.append("---")
     L.append("")
+
+    L += render_contamination(findings or [])
 
     # Summary, ordered by magnitude.
     L.append("## Summary")
@@ -247,20 +330,12 @@ def render(build, results, index, hotfix_rows, max_rows, manifest):
     L.append("| Table | Added | Removed | Changed | Plain \u2192 Hotfixed | Push IDs |")
     L.append("|---|--:|--:|--:|---|---|")
     for r in results:
-        pushes = set()
-        for key in list(r["added"])[:2000] + list(r["removed"])[:2000] + [k for k, _ in r["changed"][:2000]]:
-            try:
-                for p, _s, _d in index.get((r["table"].lower(), int(key)), []):
-                    pushes.add(p)
-            except ValueError:
-                pass
-        push_str = ", ".join(str(p) for p in sorted(pushes)[:4])
-        if len(pushes) > 4:
-            push_str += f" +{len(pushes) - 4}"
+        keys = list(r["added"]) + list(r["removed"]) + [k for k, _ in r["changed"]]
+        push_str = summarize_pushes(index, r["table"], keys)
         note = " *(hotfix-only)*" if r["plain_missing"] else ""
         L.append(
             f"| `{r['table']}`{note} | {len(r['added']):,} | {len(r['removed']):,} | "
-            f"{len(r['changed']):,} | {r['rows_plain']:,} \u2192 {r['rows_hotfixed']:,} | {push_str or '\u2014'} |"
+            f"{len(r['changed']):,} | {r['rows_plain']:,} \u2192 {r['rows_hotfixed']:,} | {push_str} |"
         )
     L.append("")
     L.append("---")
@@ -349,6 +424,7 @@ def main(argv=None):
     ap.add_argument("--build", help="version string; defaults to the newest out/ dir")
     ap.add_argument("--max-rows", type=int, default=25, help="rows shown per section per table")
     ap.add_argument("--no-attribution", action="store_true", help="skip the WTL hotfix lookup")
+    ap.add_argument("--no-contamination", action="store_true", help="skip the retail-contamination scan")
     ap.add_argument("--allow-non-forever", action="store_true")
     args = ap.parse_args(argv)
 
@@ -404,7 +480,30 @@ def main(argv=None):
 
     config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     report_path = config.REPORTS_DIR / f"hotfix_{build}.md"
-    report_path.write_text(render(build, results, index, hotfix_rows, args.max_rows, manifest), encoding="utf-8")
+    def load_table(name):
+        """Loader handed to the contamination rules: hotfixed side, ID-keyed."""
+        for d in (hotfixed_dir, plain_dir):
+            header, rows = load_csv(d / (name + ".csv"))
+            if header is not None:
+                idx, _ = key_index(header)
+                return header, {r[idx]: r for r in rows if idx < len(r)}
+        return None, {}
+
+    findings = []
+    if not args.no_contamination:
+        findings, _ref = contamination.scan(results, load_table)
+        log("")
+        if findings:
+            log(f"  {len(findings)} suspected retail-contamination finding(s)")
+            for f in findings:
+                log(f"    [{f['confidence'].upper():6}] {f['rule']}: {f['table']} {f['record']}")
+        else:
+            log("  no suspected retail contamination")
+
+    report_path.write_text(
+        render(build, results, index, hotfix_rows, args.max_rows, manifest, findings),
+        encoding="utf-8",
+    )
 
     log("")
     log(f"  {len(results)} table(s) with row-level differences")
