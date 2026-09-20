@@ -248,6 +248,25 @@ not discriminate in this build:
 | `LightParams` 453 | Referenced only by `Light` 16161 on map 3064, which does not exist here. Replaced by 7641 (Kalimdor) in `Light` 269 | 112132, valid |
 | 75 `Item` stubs | All `ClassID` 4 / `SubclassID` 0 — 32 trinkets, 23 rings, 20 necks — with no display data, pulled in one push | 112078, invalidated |
 
+The 75 IDs, so this can be checked exactly rather than by population count
+(`scripts/check_findings.py` reads them from here):
+
+```
+833, 942, 1315, 1443, 1447, 1980, 2246, 5004, 5005, 5010, 7549,
+7550, 7551, 13001, 13002, 13089, 13091, 13096, 14557, 14558, 17063,
+17065, 17082, 17108, 17109, 17110, 17982, 19856, 19863, 19871,
+19873, 19876, 19885, 19893, 19898, 19905, 19912, 19920, 19923,
+19925, 19930, 19947, 22721, 22722, 209681, 209816, 211420, 211449,
+211450, 211451, 213347, 213348, 213349, 213350, 215461, 220632,
+220633, 220634, 223327, 227967, 227972, 228432, 228464, 228465,
+228466, 228467, 228523, 228576, 228589, 228599, 228678, 228722,
+236784, 279834, 282019
+```
+
+Counting `ClassID` 4 / `SubclassID` 0 orphans instead would measure the wrong
+thing: there are **1,128** such rows in 1.60.1.69913, and orphanhood is normal
+here. Check these IDs; keep the population figure as context only.
+
 ---
 
 ## Findings to verify
