@@ -125,8 +125,9 @@ minutes.
 8. `python scripts/extract_db2.py` — every table extracted **twice**, plain
    into `db2/` and hotfix-applied into `db2_hotfixed/`, with per-table results
    in `manifest.json`. Resumable: interrupt and re-run to continue. See
-   [Hotfixes vs DB2s](#hotfixes-vs-db2s). Then run the inventory.
-   *(`inventory.py` is not written yet.)*
+   [Hotfixes vs DB2s](#hotfixes-vs-db2s).
+   Then `python scripts/inventory.py` for `files.csv` and the encrypted-file
+   count — a **drop** in that count means keys leaked or content unlocked.
 9. Diff against the previous Forever build. *(`diff_builds.py` not written
    yet.)*
 10. Commit `builds.json` and the new report.
@@ -152,6 +153,8 @@ output**:
 | The two variants can return different statuses | `TimeEventData` is 204 plain but 200 with rows hotfixed — it exists only as live data. Don't judge "empty" from the plain request alone |
 | `/dbc/hotfixes/list` with no query string | Returns all zeros, looking like "no hotfixes". Pass `?length=N` |
 | Default `locale` is `All_WoW`, not `enUS` | Pass `locale` explicitly |
+| `type:unk` search returns 0 | `type:` looks up `Listfile.TypeMap`, which has no `unk` bucket, and degrades to a substring match. 99,348 files actually carry that type — read the `content_type` column, not the token |
+| No per-file size over HTTP | `/size/data` aggregates only; real sizes need `Data/data/*.idx` parsed directly. `files.csv` leaves `size` empty |
 
 ---
 
@@ -231,7 +234,7 @@ are reproducible; `builds.json` is not.
 | `sync_refs.py` | ✅ | Clone/refresh WoWDBDefs, listfile, TACTKeys; download listfile CSV |
 | `run-wtl.ps1` | ✅ | Launch WTL from the correct working directory |
 | `extract_db2.py` | ✅ | WTL HTTP → CSV per table, both plain and hotfix-applied; resumable, writes `manifest.json` |
-| `inventory.py` | ⬜ | File listing. Magic-byte classification is **low priority** — the listfile names 2,274,258 files for this build, so little is left unnamed |
+| `inventory.py` | ✅ | File listing + magic-byte classification; writes `files.csv`, merges counts into `manifest.json` |
 | `diff_builds.py` | ⬜ | Compare two build dirs, emit markdown |
 
 The WTL routes these drive are documented in

@@ -156,6 +156,19 @@ against a live instance on 1.60.1.69913.
   like "no hotfixes exist". Always pass `?length=N`.
 - **Default locale on DB2 routes is `All_WoW`, not `enUS`.** Pass `locale`
   explicitly rather than relying on the default.
+- **`type:unk` returns 0 despite 99,348 rows carrying that type.** The `type:`
+  search token looks up `Listfile.TypeMap`, which has **no `unk` bucket**, so
+  the lookup fails and the search falls through to a plain substring match on
+  filenames — matching nothing. The `content_type` column gets `unk` from a
+  separate `TryGetValue` fallback. Trusting the search token would report
+  nothing to classify when in fact 99,348 files needed it. Read the column,
+  never the token.
+- **WTL exposes no per-file size over HTTP.** `/size/data` only aggregates
+  (`results[type] += fileSize`), and every other route works from
+  `Listfile.NameMap`, which carries no size. Real per-file sizes live in the
+  CASC indices and require parsing `Data/data/*.idx` directly — that is a
+  separate piece of work, not an API call. `files.csv` emits an empty `size`
+  column for schema stability.
 - **`/dbc/updateDefs` is the "Update WoWDBDefs & clear cache" button.** With our
   local `definitionDir` it skips the download half and only does
   reload-and-clear — which is exactly the half needed after `sync_refs.py` has
@@ -199,13 +212,14 @@ Log and continue. Only investigate if the set changes between builds.
 - **DB2 layouts are Classic-flavor, not retail.** WoWDBDefs resolves via
   layouthash, but Forever is new — expect unknown columns in new tables. Name
   them `unk_<offset>`; never guess a meaning in committed output.
-- **Listfile coverage is high: 2,274,258 named files for 1.60.1.69913.**
-  Forever has a graphical update over Classic, so some new and renamed model
-  and texture paths are still uncovered — but the community listfile lands
-  the overwhelming majority. **Unnamed-file classification is therefore
-  lower priority than originally planned.** Do not invest in magic-byte
-  identification ahead of work on named data; revisit only if coverage
-  drops sharply in a future build.
+- **Naming is not the gap; typing is.** This build contains **1,441,771**
+  files, and **every one of them has a listfile name** — zero unnamed.
+  (2,274,258 is the *listfile's* total size across the whole retail FDID
+  namespace, not a count for this build. Do not conflate the two.)
+  But **99,348 files had no `content_type`**, and a magic-byte pass
+  recovered **87,506** of them — 79,784 as `wmo_or_adt` — leaving 11,842
+  still unknown. **Magic-byte classification is valuable and worth
+  maintaining.** What is not worth chasing is filename recovery.
 - **Hotfixes are a separate diffable source.** WTL loads live hotfix data
   from the client's `Cache/ADB/enUS` directory and tracks push IDs. This is
   distinct from the static DB2s shipped in the build: hotfixes are Blizzard

@@ -281,6 +281,42 @@ First call triggers lazy init of the SoundKit / ModelFileData /
 TextureFileData / CreatureModelData maps and blocks on all four
 (`Task.WaitAll`), so it can be slow.
 
+This route iterates `Listfile.NameMap`, so it can only ever return **named**
+files. `recordsTotal` is `CASC.AvailableFDIDs.Count` and `recordsFiltered`
+(unsearched) is named-and-available; the difference is the unnamed count. At
+1.60.1.69913 both are **1,441,771** — nothing is unnamed.
+
+> **Trap: `type:unk` returns 0 despite 99,348 rows carrying that type.**
+> The `type:` search token looks up `Listfile.TypeMap` (`Listfile.cs:588`),
+> which has no `unk` bucket. The lookup fails, no predicate is returned, and
+> the search degrades to a substring match on filenames — which matches
+> nothing. Meanwhile the row's `content_type` column gets `unk` from an
+> unrelated `TryGetValue` fallback. Trusting the token would report nothing
+> to classify when 99,348 files needed it. **Read the column, not the
+> token.** The same applies to `encrypted:` — it takes a hex key, so
+> `encrypted:true` silently degrades to a substring match; the exact-match
+> tokens are `knownkey`, `unknownkey` and `encryptedbutnot`.
+
+> **No per-file size exists anywhere in this API.** `/size/data` aggregates
+> (`results[type] += fileSize`, `SizeController.cs:158`) and every other
+> route works from `Listfile.NameMap`, which carries no size. Per-file sizes
+> live in the CASC indices; `SizeController` reads `Data/data/*.idx` off
+> disk directly, and reproducing that is the only route to real sizes.
+> `inventory.py` emits an empty `size` column rather than inventing one.
+
+### Aggregate sizes — `GET /size/data`
+
+| Param | Type | Default |
+|---|---|---|
+| `groupType` | string | `filetype` — also `folder`, `expansion`, `majorpatch`, `patch` |
+| `uniqueOnly` | bool | `false` |
+| `localOnly` | bool | `false` — reads `Data/data/*.idx` from the install |
+| `encodedSizes` | bool | `false` |
+| `listfileSearch` | string | `available` |
+
+Returns **totals per group**, never per-file rows. Listed here so it is not
+mistaken for a source of per-file sizes.
+
 ### Filename by FDID — `GET /listfile/info` ✅ confirmed
 
 | Param | Type | Notes |
