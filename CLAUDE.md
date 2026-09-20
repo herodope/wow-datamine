@@ -572,6 +572,32 @@ regions but `cn` can lag or diverge.
 - **Log, don't crash.** An unreadable file is expected. Record it with a reason
   (`encrypted`, `missing_key`, `bad_blte`, `unknown_format`) and continue.
 - **Read WTL's source for route shapes.** Do not guess HTTP endpoints.
+- **Every rule here is either measured or source-read, and must say which.**
+  Reading the controller tells you what the code *can* do. Only a live
+  response tells you what it *does*. Source-reading produces a hypothesis;
+  measurement produces a rule. Label the difference and never let the first
+  masquerade as the second.
+
+  `docs/wtl-api.md` marks measured routes ✅ and keeps an explicit
+  "still source-read only" list. Anything unexercised says so where it is
+  written, not only in a verification log at the bottom, because the person
+  who acts on a rule reads the rule and not the appendix.
+
+  This is not hypothetical. The `build=` rule on `/dbc/meta/getMappings` was
+  derived correctly from `BuildRange.Contains` — componentwise comparison,
+  1.60.x matches no preset range — committed as though verified, and was
+  **backwards**. The real behaviour is that omitting `build=` returns two
+  conflicting enum variants with the retail one first, so a decoder taking the
+  first match would have labelled every Forever weather row with **retail**
+  names: `0 None, 1 Clear, 2 Rain` instead of `0 Clear, 1 Rain, 2 Snow`. Wrong
+  data, plausible output, no error — the same shape as every other gotcha in
+  the WTL section, arrived at by the documentation process itself. One HTTP
+  request settled it. Corrected in `7575f2c`; the original is `7655839`.
+
+  Practically: source-read a route to know what to ask for, then ask. When WTL
+  is not running, write the finding down as unexercised and **promote it only
+  after a response confirms it**. A hypothesis recorded honestly is useful;
+  a hypothesis recorded as fact is a trap with this project's name on it.
 - **Diffs are the deliverable.** Raw extraction is a means to an end; the
   markdown reports are what this project produces.
 - **Extract every table twice: with and without the hotfix overlay.** Plain

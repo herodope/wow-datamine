@@ -7,6 +7,14 @@ inferred from URL patterns, and the marked routes were confirmed live against
 
 Base URL: `http://localhost:5080` (`config.WTL_URL`).
 
+**Every route here is marked ✅ measured or ⚠️ source-read**, per the
+convention in CLAUDE.md. ✅ means a live response confirmed the behaviour
+described, against `1.60.1.69913`. ⚠️ means the signature and logic were read
+from the controller but nothing has been sent — treat those as hypotheses and
+promote them after exercising them. The distinction is not pedantic: the
+`build=` rule on `/dbc/meta/getMappings` was source-read, committed as fact,
+and was backwards.
+
 WTL serves exactly one build at a time — the one it loaded at startup. The
 `build` parameter on most routes selects which *extracted-to-disk* copy to read;
 for the currently loaded build it reads from CASC directly.
@@ -111,7 +119,7 @@ Used by `/dbc/hotfixes/list`, `/listfile/files` and `/build/table`. A
 
 ## DB2 / DBC
 
-### List tables — `GET /listfile/db2s` ✅ confirmed
+### List tables — `GET /listfile/db2s` ✅ measured
 
 | Param | Type | Default | Notes |
 |---|---|---|---|
@@ -127,7 +135,7 @@ Returns a bare JSON array of table names, **not** a DataTables envelope:
 filters `dbdProvider.GetNames()` by `dbcProvider.DB2IsCached(name, build)`
 (`DBCManager.cs:152`).
 
-### Table metadata — `GET /dbc/info` ✅ confirmed
+### Table metadata — `GET /dbc/info` ✅ measured
 
 | Param | Type | Notes |
 |---|---|---|
@@ -152,7 +160,7 @@ formats are the literal string `"N/A"`. `magic` is the last element
 otherwise. This is a per-build, one-time prerequisite — see
 `/dbc/export/alltodisk`.
 
-### Export one table as CSV — `GET|POST /dbc/export` ✅ confirmed
+### Export one table as CSV — `GET|POST /dbc/export` ✅ measured
 
 Also routed as `/dbc/export/csv` — identical handler, both `[Route("")]` and
 `[Route("csv")]` on the same method (`ExportController.cs:57`).
@@ -203,7 +211,7 @@ shape as the DataTables query. For plain extraction, use GET.
 > /dbc/export/?name=spell&build=1.60.1.69913&useHotfixes=true     -> db2_hotfixed/
 > ```
 
-### Export every table as CSV — `GET /dbc/export/all`
+### Export every table as CSV — `GET /dbc/export/all` ⚠️ source-read
 
 | Param | Type | Default |
 |---|---|---|
@@ -218,7 +226,7 @@ surfaced in the response — a table missing from the ZIP is indistinguishable
 from a table that failed. Prefer per-table calls when you need to account for
 failures.
 
-### Extract DB2s to disk — `GET /dbc/export/alltodisk`
+### Extract DB2s to disk — `GET /dbc/export/alltodisk` ⚠️ source-read
 
 | Param | Type | Default |
 |---|---|---|
@@ -230,7 +238,7 @@ bare `true`. This is the "DBCs missing, extract?" action on the builds page
 (`wwwroot/builds/index.html:359`) and the prerequisite for `/dbc/info` and for
 diffing this build later.
 
-### Raw DB2 file — `GET /dbc/export/db2`
+### Raw DB2 file — `GET /dbc/export/db2` ⚠️ source-read
 
 | Param | Type | Default |
 |---|---|---|
@@ -241,7 +249,7 @@ diffing this build later.
 Note the parameter is `fullBuild` here, not `build`. Serves from CASC when
 `fullBuild == CASC.BuildName`, otherwise from disk. 404 if absent.
 
-### Paged table data — `GET|POST /dbc/data/{name}`
+### Paged table data — `GET|POST /dbc/data/{name}` ⚠️ source-read
 
 | Param | Type | Default |
 |---|---|---|
@@ -258,7 +266,7 @@ encoding would have to be undone.
 
 ## Files
 
-### File list — `GET /listfile/files`
+### File list — `GET /listfile/files` ✅ measured
 
 | Param | Type | Notes |
 |---|---|---|
@@ -312,7 +320,7 @@ build.
 > disk directly, and reproducing that is the only route to real sizes.
 > `inventory.py` emits an empty `size` column rather than inventing one.
 
-### Aggregate sizes — `GET /size/data`
+### Aggregate sizes — `GET /size/data` ⚠️ source-read
 
 | Param | Type | Default |
 |---|---|---|
@@ -325,7 +333,7 @@ build.
 Returns **totals per group**, never per-file rows. Listed here so it is not
 mistaken for a source of per-file sizes.
 
-### Filename by FDID — `GET /listfile/info` ✅ confirmed
+### Filename by FDID — `GET /listfile/info` ✅ measured
 
 | Param | Type | Notes |
 |---|---|---|
@@ -336,7 +344,7 @@ Returns a bare string — the filename, or `""` if unknown. With a
 comma-separated list it returns the **first** id that resolves, not all of
 them.
 
-### File contents by FDID — `GET /casc/fdid`
+### File contents by FDID — `GET /casc/fdid` ✅ measured
 
 | Param | Type | Default |
 |---|---|---|
@@ -347,7 +355,7 @@ them.
 Returns the file bytes as `application/octet-stream`, 404 if
 `!CASC.FileExists(fileDataID)` or the read returns null.
 
-### File detail — `GET /casc/moreinfo`
+### File detail — `GET /casc/moreinfo` ⚠️ source-read
 
 | Param | Type |
 |---|---|
@@ -361,12 +369,12 @@ Scraping it is fragile; prefer `/listfile/files` and `/listfile/info`.
 
 ## Builds
 
-### Current build name — `GET /casc/buildname` ✅ confirmed
+### Current build name — `GET /casc/buildname` ✅ measured
 
 No parameters. Returns a bare string, e.g. `1.60.1.69913`. The cheapest
 liveness probe for WTL.
 
-### Build table — `POST /build/table` ✅ confirmed
+### Build table — `POST /build/table` ✅ measured
 
 `[HttpPost]` only — a GET returns 405.
 
@@ -398,7 +406,7 @@ capitalised, unlike the lowercase strings in `/listfile/files`).
 > rows are other games on recycled product codes — apply
 > `config.is_forever_build()` before using anything from them.
 
-### Archived builds — `GET /build/list`
+### Archived builds — `GET /build/list` ⚠️ source-read
 
 No parameters. Returns `SQLiteDB.GetBuilds()` as a JSON array of objects (not
 the DataTables envelope) — WTL's own record of builds it has seen.
@@ -407,7 +415,7 @@ the DataTables envelope) — WTL's own record of builds it has seen.
 
 ## Hotfixes
 
-### Hotfix list — `GET /dbc/hotfixes/list` ✅ confirmed
+### Hotfix list — `GET /dbc/hotfixes/list` ✅ measured
 
 | Param | Type | Default |
 |---|---|---|
@@ -434,7 +442,7 @@ hotfix, not when Blizzard pushed it. `tableIsKnown` is `"1"`/`"0"`.
 Ordering is fixed in SQL: `firstdetected DESC, pushID DESC, tableName DESC,
 recordID DESC`. `length` is applied as a SQL `LIMIT`, so paging is server-side.
 
-### Download latest hotfixes — `GET /dbc/hotfixes/downloadLatest`
+### Download latest hotfixes — `GET /dbc/hotfixes/downloadLatest` ⚠️ source-read
 
 | Param | Type |
 |---|---|
@@ -446,7 +454,7 @@ Pulls DBCache files from Raidbots. Returns 200 with an empty body.
 
 ## Cache management (patch day)
 
-### `GET /dbc/updateDefs` ✅ confirmed
+### `GET /dbc/updateDefs` ✅ measured
 
 Reloads the DBD manifest and definitions, then clears both the DBC cache and
 the hotfix cache. Returns `"Reloaded <n> definitions and cleared DBC cache!"`
@@ -512,12 +520,12 @@ post-call export of `itemsearchname` logged
 been served minutes earlier — the entry was gone and was rebuilt from the
 on-disk DB2.
 
-### `GET /dbc/reloadDefs`
+### `GET /dbc/reloadDefs` ⚠️ source-read
 
 Same, plus clearing the enum provider cache and `HotfixManager`. Does not touch
 the DBD manifest.
 
-### `GET /dbc/reloadHotfixes`
+### `GET /dbc/reloadHotfixes` ⚠️ source-read
 
 Clears hotfix state and re-reads the DBCache files. Returns
 `"Reloaded hotfixes"`. Needed after the client writes new hotfix data —
@@ -531,7 +539,7 @@ Three routes in the whole API produce pixels: `/casc/blp2png`, `/map/tile` and
 `/map/download`. Everything else that looks image-related returns FDIDs or
 metadata that you then feed to one of these.
 
-### BLP → PNG — `GET /casc/blp2png`
+### BLP → PNG — `GET /casc/blp2png` ✅ measured
 
 `CASCController.cs:1603`.
 
@@ -575,7 +583,7 @@ casing works.
   exe without that variable and it is a bare 500 with an empty body. Check
   `content_type` before calling either way.
 
-### Raw file bytes — `GET /casc/fdid`, `GET /casc/chash`
+### Raw file bytes — `GET /casc/fdid`, `GET /casc/chash` ⚠️ source-read
 
 `/casc/fdid` is documented under **Files** above. `/casc/chash`
 (`CASCController.cs:59`) is the same thing keyed on a content hash:
@@ -592,7 +600,7 @@ Resolves CKey → EKey via `CASC.TryGetEKeysByCKey` and streams the first EKey.
 Neither route decodes anything — they hand back the file as it sits in CASC
 after BLTE. For a BLP that means BLP bytes, not an image.
 
-### Bulk extraction — `GET /casc/zip/fdids`
+### Bulk extraction — `GET /casc/zip/fdids` ⚠️ source-read
 
 `ZipController.cs:12`. The route is `casc/[controller]/fdids`, i.e.
 **`/casc/zip/fdids`**.
@@ -613,7 +621,7 @@ duplicate basenames collide inside the archive, and an FDID absent from
 recorded in `errors.txt` rather than named `<fdid>.unk`. The `.unk` fallback in
 the source only fires for an FDID that is *in* the map with an empty name.
 
-### Map list — `GET /map/list`
+### Map list — `GET /map/list` ⚠️ source-read
 
 `MapController.cs:225`. No parameters. Returns a JSON array of
 
@@ -631,7 +639,7 @@ not a numeric map id) and `wdtFileDataID` = 0. Downstream routes accept
 
 Uses `CASC.BuildName`; there is no `build` parameter.
 
-### Tile grid for a map — `GET /map/wdtMask`, `GET /map/wdtMaskPuzzle`
+### Tile grid for a map — `GET /map/wdtMask`, `GET /map/wdtMaskPuzzle` ⚠️ source-read
 
 `MapController.cs:636` and `:643`.
 
@@ -669,7 +677,7 @@ Note the listfile-fallback branch builds `liquidFlow` paths as
 `world/maps/liquidflow/…` (`MapController.cs:301` vs `:326`), so `liquidFlow` is
 always 0 on that path. Do not read anything into a zero there.
 
-### One tile as pixels — `GET /map/tile`
+### One tile as pixels — `GET /map/tile` ✅ measured
 
 `MapController.cs:156`.
 
@@ -697,7 +705,7 @@ both other branches), and an FDID with no known type is **assumed to be BLP**.
 The BLP path picks the smallest mip still ≥ `targetSize` then resizes down, so
 `targetSize` is honoured; the ADT path renders at 128 and scales up.
 
-### Whole map as one PNG — `GET /map/download`
+### Whole map as one PNG — `GET /map/download` ⚠️ source-read
 
 `MapController.cs:795`. Same four parameters as `wdtMask`. Returns `image/png`
 named `<mapID>.png`.
@@ -766,7 +774,7 @@ back to BDBD.
 (`DBDefsLib/Constants/MetaType.cs`). The `// null for Color/Date (meta 2/3)`
 comment in `MetaController.cs` is stale — there is no meta 3 in this version.
 
-### All mappings — `GET /dbc/meta/getMappings`
+### All mappings — `GET /dbc/meta/getMappings` ✅ measured
 
 `MetaController.cs:26`.
 
@@ -827,7 +835,7 @@ where `entries` is `[{ value, name, builds, buildRanges, comment }]` for `meta`
 > rather than "filtered out". **After every `sync_refs.py`, re-check that no
 > ENUM/FLAGS mapping returns zero entries with `build=` set.**
 
-### One column — `GET /dbc/meta/getMeta`
+### One column — `GET /dbc/meta/getMeta` ⚠️ source-read
 
 `MetaController.cs:74`.
 
@@ -855,7 +863,7 @@ are mapped `COLOR` in `mapping.dbdm`, all of them named.
 `Field_1_60_1_69876_055` is **not** among them, so the meta tree does not
 support reading it as packed RGB either. That finding stays unconfirmed.
 
-### Column headers, FKs and comments — `GET /dbc/header/{name}`
+### Column headers, FKs and comments — `GET /dbc/header/{name}` ✅ measured
 
 `HeaderController.cs:37`. Not previously documented here, and the most useful
 route for annotating a diff.
@@ -888,7 +896,7 @@ convention. `fks` is what turns an ID column into a name in a report.
 
 Errors are returned as HTTP 200 with the message in `error`, like `/dbc/info`.
 
-### `GET /dbc/relations` and `GET /dbc/labelColumns`
+### `GET /dbc/relations` ⚠️ source-read and `GET /dbc/labelColumns` ✅ measured
 
 `RelationController.cs` / `LabelController.cs`. No parameters.
 
@@ -910,7 +918,7 @@ These are the 531 / 12 in CLAUDE.md's baseline metrics.
 
 ## Row lookup and rendered tooltips
 
-### One row — `GET /dbc/peek/{name}`
+### One row — `GET /dbc/peek/{name}` ⚠️ source-read
 
 `PeekController.cs:30`.
 
@@ -933,7 +941,7 @@ fields are emitted as their numeric value.
 - `pushIDs` filters the hotfix overlay to specific pushes, which is the cheapest
   way to answer "what did push 112132 change in this row".
 
-### All matching rows — `GET /dbc/find` and `GET /dbc/find/{name}`
+### All matching rows — `GET /dbc/find` and `GET /dbc/find/{name}` ⚠️ source-read
 
 `FindController.cs:15` and `:127`.
 
@@ -946,7 +954,7 @@ fields are emitted as their numeric value.
 Both return a list of the same stringified-dict shape `peek` uses. Use `find`
 where `peek` would silently return only the first of several matches.
 
-### Rendered tooltips — `GET /dbc/tooltip/item/{id}`, `/dbc/tooltip/spell/{id}`
+### Rendered tooltips — `GET /dbc/tooltip/item/{id}`, `/dbc/tooltip/spell/{id}` ✅ measured
 
 `TooltipController.cs:108` and `:339`. These are the closest thing to
 "presentable" output in the API and the obvious source for a patch-note report:
@@ -1097,15 +1105,23 @@ Checked against a live WTL on `http://localhost:5080`, build `1.60.1.69913`,
 
 ### Not yet verified
 
-`/dbc/export/all`, `/dbc/export/alltodisk`, `/dbc/export/db2`,
-`/casc/fdid`, `/casc/moreinfo`, `/build/list`,
-`/dbc/hotfixes/downloadLatest`, `/dbc/reloadDefs` and `/dbc/reloadHotfixes`.
-Their signatures are read from source but not exercised — the remaining cache
-and download routes mutate WTL state, so they were left alone while it was
-serving.
+**The per-route ✅ / ⚠️ markers are the authoritative list** — this section does
+not repeat them, because a second list drifts out of step with the first and
+then quietly contradicts it. Scan the headings.
 
-The 2026-09-20 additions were first written source-read only. A second pass the
-same day exercised these against a live instance on 1.60.1.69913:
+Two standing reasons a route stays ⚠️:
+
+- **It mutates WTL state.** `/dbc/export/alltodisk`,
+  `/dbc/hotfixes/downloadLatest`, `/dbc/reloadDefs`, `/dbc/reloadHotfixes`
+  and the `/casc/update*` family write to disk or reload caches. They are left
+  alone while WTL is serving an extraction. Exercise them deliberately,
+  between runs, not as part of documenting them.
+- **Nothing has needed it yet.** The rest are simply unexercised. Any of them
+  is one request away from ✅; promote it when a script first uses it, and
+  record what came back.
+
+A second pass on 2026-09-20 exercised the following against a live instance on
+1.60.1.69913:
 
 | Route | Result |
 |---|---|
@@ -1123,10 +1139,13 @@ was originally written backwards — "omit it" — from reading
 `WeatherType.dbde`'s six build-tagged lines without noticing the six untagged
 lines below them. The live response settled it.
 
-Still source-read only: `/casc/chash`, `/casc/zip/fdids`, `/map/list`,
-`/map/wdtMask`, `/map/wdtMaskPuzzle`, `/map/download`, `/map/clearCache`,
-`/dbc/meta/getMeta`, `/dbc/relations`, `/dbc/labelColumns`, `/dbc/peek/{name}`,
-`/dbc/find`, `/dbc/tooltip/spell`, `/dbc/tooltip/file` and `/dbc/tooltip/wex`.
+| `GET /dbc/labelColumns` | 12 entries, all `Table::LabelID` — not display-name columns |
+| `GET /dbc/header/Light` | `ContinentID → Map::ID`, `LightParamsID[0..7] → LightParams::ID`, no unverifieds |
 
-`/dbc/updateDefs` **was** exercised (see above) after confirming from source
+**Corrected by that pass**, beyond the `build=` reversal: `/casc/fdid` returns
+**200 with bytes** for encrypted FDIDs that `/casc/blp2png` 404s on, so the two
+routes disagree about the same file by design; and `/dbc/labelColumns` is the
+gameplay Label system, not a display-name registry.
+
+`/dbc/updateDefs` **was** exercised (2026-09-19) after confirming from source
 that it only clears in-memory caches.
