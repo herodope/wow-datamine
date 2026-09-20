@@ -264,7 +264,7 @@ def step7_extract_dbcs(version, dry):
 
 
 def step8_extract(version, dry):
-    step(8, "extract_db2.py, inventory.py and extract_gametables.py")
+    step(8, "extract_db2.py, inventory.py, extract_gametables.py, build_db.py")
     run([SCRIPTS / "extract_db2.py", "--build", version] if version else [SCRIPTS / "extract_db2.py"],
         dry, label="extract_db2.py")
     log("")
@@ -279,6 +279,15 @@ def step8_extract(version, dry):
     run([SCRIPTS / "extract_gametables.py", "--build", version] if version
         else [SCRIPTS / "extract_gametables.py"],
         dry, label="extract_gametables.py")
+    log("")
+    # Last, because it loads all three of the above. The CSVs stay the source
+    # of truth; wow.db is a query surface over them, and is rebuilt from
+    # scratch each run rather than updated in place.
+    log("  build_db.py : all of the above into one queryable out/<build>/wow.db")
+    log("    unprefixed = live (db2_hotfixed), plain_ = as shipped, gt_ = GameTables")
+    run([SCRIPTS / "build_db.py", "--build", version] if version
+        else [SCRIPTS / "build_db.py"],
+        dry, label="build_db.py")
 
 
 def step9_diff(version, previous, dry):

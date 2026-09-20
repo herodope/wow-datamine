@@ -812,6 +812,7 @@ apply to the libraries.
 │   ├── inventory.py         # file listing + magic-byte classification
 │   ├── extract_gametables.py# GameTables/*.txt -- NOT DB2s, see Key facts
 │   ├── enrich.py            # ID -> human-readable context, for the reports
+│   ├── build_db.py          # CSVs -> out/<build>/wow.db, one queryable file
 │   ├── render_patchnotes.py # self-contained HTML, hotfix + build-diff modes
 │   └── diff_builds.py       # compare two build dirs, emit markdown
 ├── out/                     # GITIGNORED — extracted data
@@ -821,6 +822,7 @@ apply to the libraries.
 │       ├── hotfixes.csv        # push IDs + changed rows from Cache/ADB/enUS
 │       ├── files.csv           # fdid, path, size, encrypted, content_type
 │       ├── gametables/*.txt    # tab-separated, NOT DB2s — see Key facts
+│       ├── wow.db              # SQLite over all of the above, rebuildable
 │       └── manifest.json       # row counts, layouthashes, metrics
 ├── reports/                 # COMMITTED — diff output
 │   ├── <from>_to_<to>.md
@@ -829,6 +831,49 @@ apply to the libraries.
 │   └── patchnotes_<from>_to_<to>.html
 └── vendor/                  # GITIGNORED — cloned third-party tools
 ```
+
+### `wow.db`
+
+`build_db.py` loads every extracted CSV into one SQLite file per build. The
+CSVs remain the source of truth; this is a query surface over them, rebuilt
+from scratch on each run and never updated in place. Gitignored with the rest
+of `out/`.
+
+| Prefix | Source | Meaning |
+|---|---|---|
+| *(none)* | `db2_hotfixed/` | the **live** view — shipped plus hotfixes |
+| `plain_` | `db2/` | **as shipped** in the client |
+| `gt_` | `gametables/` | tab-separated GameTables, **not DB2s** |
+
+The prefixes exist so the comparison this repo is built around is one query:
+
+```sql
+SELECT h.ID, h.Display_lang
+FROM ItemSparse h LEFT JOIN plain_ItemSparse p USING (ID)
+WHERE p.ID IS NULL;        -- 4,218 rows that exist only as live hotfix data
+```
+
+`gt_` is not decoration. `SpellScaling` exists both as a DB2 (204-empty in
+this build) and as `SpellScaling.txt` in the GameTables, and they are
+different things — an unprefixed load would collide the moment the DB2 stopped
+being empty.
+
+Two details worth knowing before querying:
+
+- **Column names are sanitised.** `Corpse[0]` becomes `Corpse_0`, because
+  brackets are alternative identifier quoting in SQLite and a column you have
+  to escape carefully is a column nobody will query. Array foreign keys are
+  still indexed: the array suffix is stripped before asking whether a column
+  ends in `ID`, so `LightParamsID[3]` → `LightParamsID_3` is indexed.
+- **Types are sniffed and declared as affinities**, so `WHERE ID = 6343`
+  matches rather than silently finding nothing against TEXT `'6343'`. A
+  mis-sniff degrades safely — SQLite stores a value that will not convert
+  as-is.
+
+At 1.60.1.69913: 1,263 tables, 3,844,494 rows, 4,210 indexes, ~317 MB, ~20s.
+69876 and 69893 load 1,262 — they have no `TimeEventData`, which exists only
+as hotfix data. `_build_info` records which build the file is for, so one
+cannot be mistaken for another.
 
 ### `manifest.json` resolution values
 
@@ -1080,9 +1125,10 @@ regions but `cn` can lag or diverge.
    though step 4 refreshed them on disk. With a local `definitionDir` this
    only reloads and clears; it downloads nothing.
 7. Extract DBCs for the new build via the builds page.
-8. Run `extract_db2.py`, then `inventory.py`, then `extract_gametables.py`
-   (in that order — GameTable discovery reads `files.csv`). `patchday.py`
-   step 8 does all three.
+8. Run `extract_db2.py`, then `inventory.py`, then `extract_gametables.py`,
+   then `build_db.py` (in that order — GameTable discovery reads
+   `files.csv`, and the database loads all three). `patchday.py` step 8
+   does all four.
 9. Diff against the previous Forever build.
 10. Commit `builds.json` and the new report.
 
