@@ -242,6 +242,103 @@ not discriminate in this build:
 
 ---
 
+## Findings to verify
+
+Dated predictions from 1.60.1.69913, recorded **2026-09-20** so the next build
+can confirm or kill them. Each entry states what was observed, what would
+confirm it, and what would falsify it. **Resolve these before adding new ones**
+— an unresolved prediction is worth more than a new guess.
+
+### 1. A weekly event schedule starting 12 October 2026
+
+`TimeEventData` is **hotfix-only** (ships empty, push 112079) and holds exactly
+three rows:
+
+| ID | TimeEventID | Timestamp | UTC |
+|---|---|---|---|
+| 25930 | 3162 | 1791824400 | 2026-10-12 17:00 |
+| 25943 | 3163 | 1792429200 | 2026-10-19 17:00 |
+| 25956 | 3164 | 1793034000 | 2026-10-26 17:00 |
+
+Exactly 7 days apart, sequential event IDs, same region group (5). 17:00 UTC is
+Blizzard's usual test-window slot.
+
+**Watch:** whether the dates shift, whether a fourth row appears (extending the
+cadence), and whether the table ships populated in the client rather than
+arriving by hotfix. A shifted date means the schedule slipped; a fourth row
+means the cadence is ongoing rather than a three-week run.
+
+### 2. A shard/world mechanic being repositioned
+
+Three `GlobalStrings` rows changed under one push (112128), all the same rename:
+
+```
+60077  "Transfer Now"                                  -> "Refresh Now"
+60078  "Your character will be transferred to another  -> "The world around you will
+        shard in %s %s."                                   refresh in %s %s. ..."
+60175  "Transfer to a new shard now."                  -> "Refresh the world now."
+```
+
+Nothing else in `GlobalStrings` changed. This is user-facing wording for a live
+mechanic being settled *after* the build shipped, which suggests the system
+itself is still being positioned.
+
+**Watch:** supporting UI strings using "refresh" language, new tables or columns
+for the mechanic, and whether "shard" wording survives anywhere. If the rename
+is cosmetic, expect nothing further; if the mechanic is being reworked, expect
+more strings and possibly a new table.
+
+### 3. The vanilla PvP rank ladder arrived by bulk injection
+
+1,385 modern-ID `ItemSparse` additions, of which **481 carry vanilla PvP rank
+titles** across both factions (Blood Guard 49, Knight-Lieutenant 47, General 43,
+Warlord 42, Marshal 40, Field Marshal 39, Grand Marshal 26, High Warlord 26,
+Stone Guard 20, Sergeant Major 20, …). 689 of the modern-ID additions require
+level 60. All arrived with **synthetic push IDs**, i.e. one bulk load rather
+than incremental authoring.
+
+**Watch:** whether these ship in the client next build instead of arriving by
+hotfix. Shipping in the client means the feature is settled; arriving by hotfix
+again means it is still being staged. Also watch whether the ladder grows —
+the vanilla honor system has 14 ranks per faction, so an incomplete set now
+implies more to come.
+
+### 4. LightData column 055 — UNCONFIRMED, do not assert
+
+Twelve `LightData` rows (74945–74956, `LightParamID` 7742, Kalimdor) covering
+the complete day cycle each changed `Field_1_60_1_69876_055` from `0` to
+`13533183`, under push 112132.
+
+`13533183` = `0xCE7FFF` = bytes (206, 127, 255), which is *consistent with* a
+packed RGB value — a light lavender. **This is a guess and must not be stated
+as fact.** The column is unnamed in WoWDBDefs for this build, and per the
+conventions above an unknown column's meaning is never asserted in committed
+output.
+
+**Watch:** whether WoWDBDefs names the column in a later definition sync. Only
+then does the interpretation become reportable. If named as something other
+than a colour, discard the reading entirely.
+
+### 5. Three open retail-contamination cases
+
+See the section above for evidence. All three are open as of 1.60.1.69913:
+
+| Record | Status |
+|---|---|
+| `Achievement` 9275 (Warlord Zaela, WoD) + category 15233 | removed by hotfix, still in the shipped client |
+| `LightParams` 453 (map 3064) | replaced by hotfix, still in the shipped client |
+| 75 `Item` stubs (ClassID 4 / SubclassID 0) | removed by hotfix, still in the shipped client |
+
+Each was pruned *live* but remains in the client data, so the question is
+whether 1.60.2 ships without them.
+
+**Watch:** whether each is gone from the shipped DB2s in the next build — that
+confirms the hotfix was a stopgap ahead of a real fix — and whether new
+contamination appears. `scripts/contamination.py` reports this automatically;
+a *new* HIGH-confidence finding is the thing to look at.
+
+---
+
 ## Key facts
 
 - **FDIDs share the retail namespace.** `wowdev/wow-listfile` applies directly.
