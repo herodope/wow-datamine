@@ -24,6 +24,41 @@ Rules are ranked by how much they actually discriminate, measured against
 Deliberately NOT a rule: "ID falls in a modern retail range". Achievement IDs
 here run 627-64159 with 160 of 233 rows above 61000, so an ID-range test would
 flag most of the table. ID ranges are reported as supporting evidence only.
+
+Deliberately NOT a rule: "the row is unreferenced". Proposed after the 461xxx
+Thunder Clap ladder turned out to be defined but unconsumed (CLAUDE.md finding
+#7). Measured on 1.60.1.69913 before writing it, and the base rate kills it.
+
+Resolving all 157 declared FK columns pointing at a spell and counting inbound
+references per spell, across four ways of deciding which columns count as
+"the entity's own definition tables":
+
+    framing                                flags   separates the two ladders?
+    coverage >= 50% of spells = definition  10.4%   NO  (461xxx scores 7 each)
+    table name starts with "Spell"          63.9%   yes
+    hand-picked player-reachability cols    64.2%   yes
+    SkillLineAbility membership alone       80.3%   yes
+
+Every framing that discriminates flags between two thirds and four fifths of
+the table. The one with a tolerable rate does not discriminate at all, and the
+coverage distribution has no natural break to pin a threshold to -- it runs
+smoothly from 99.95% down to 0.00%.
+
+Worse, the rate is FLAT across ID ranges: 63.5% of classic-era spells
+(ID < 100k) are unreferenced and 63.5% of modern-ID spells (>= 400k) are too.
+Being unreferenced carries no information about whether a row is retail-era.
+
+Most spells in any build are NPC abilities, triggered effects, item procs and
+internal auras -- nothing is supposed to reference them. So an unreferenced
+row is the NORMAL state, not a signal, and this would be worse than
+orphan_removal was before it was narrowed (8,286 of 31,675 Item rows, 26%).
+
+What IS informative is a PAIRED comparison -- two rows with the same name and
+rank where one is fully wired and the other is not, which is what finding #7
+rests on. That is a judgement about a specific pair, not a population test,
+and it is not automatable into a confidence level. inbound_references() below
+exposes the measurement so the paired comparison can be made by hand; it
+deliberately assigns no confidence and produces no findings.
 """
 
 import csv
@@ -54,6 +89,64 @@ def _col(header, name):
         if n.strip().lower() == name.lower():
             return i
     return None
+
+
+def inbound_references(entity_table, row_ids, load_table, relations,
+                       definition_prefix=None):
+    """Count declared FK references INTO `row_ids`, grouped by source column.
+
+    A measurement, not a rule -- see the module docstring for why "the row is
+    unreferenced" is not a usable signal on its own. Use it to compare a row
+    against a peer you already suspect it mirrors.
+
+    `relations(target)` must return the columns DBD declares as foreign keys
+    to `target`, e.g. from `GET /dbc/relations/Spell::ID`. Resolving declared
+    relations is the point: scanning every column for a matching value cannot
+    tell a real reference from a numeric collision, and at 1.60.1.69913 that
+    inflates a classic Thunder Clap rank from 17 references to ~47 by picking
+    up WMOMinimapTexture::ID, TaxiPathNode::ID and UiTextureAtlasMember::ID,
+    which merely have rows whose own ID is 6343.
+
+    Returns {row_id: {"total": int, "definition": [cols], "external": [cols]}}.
+    `definition_prefix` splits the entity's own description tables from
+    everything else by table-name prefix (e.g. "Spell"); with None, every
+    column counts as external.
+    """
+    targets = []
+    for col in ("ID",):
+        targets.append(f"{entity_table}::{col}")
+
+    cols = set()
+    for t in targets:
+        try:
+            cols.update(relations(t))
+        except Exception:                             # noqa: BLE001 - log, don't crash
+            continue
+
+    wanted = {str(r) for r in row_ids}
+    out = {r: {"total": 0, "definition": [], "external": []} for r in wanted}
+
+    for ref in sorted(cols):
+        tbl, _, col = ref.partition("::")
+        header, rows = load_table(tbl)
+        if not header:
+            continue
+        idxs = [i for i, n in enumerate(header) if n == col or n.startswith(col + "[")]
+        if not idxs:
+            continue
+        hit = set()
+        for row in rows.values():
+            for i in idxs:
+                if i < len(row) and row[i] in wanted:
+                    hit.add(row[i])
+        if not hit:
+            continue
+        is_defn = bool(definition_prefix) and tbl.startswith(definition_prefix)
+        for r in hit:
+            out[r]["total"] += 1
+            out[r]["definition" if is_defn else "external"].append(ref)
+
+    return out
 
 
 def build_reference(load_table):

@@ -364,8 +364,8 @@ how much they actually discriminate:
 | `light_absent_map` | HIGH | A `LightParams` ID whose only referencing `Light` rows sit on absent maps |
 | `orphan_removal` | MEDIUM | Rows pulled together in one push that carry no supporting display data |
 
-**Two rules deliberately not implemented**, because measurement showed they do
-not discriminate in this build:
+**Three rules deliberately not implemented**, because measurement showed they
+do not discriminate in this build:
 
 - **ID falls in a "modern retail range".** `Achievement` IDs run 627–64159 with
   160 of 233 rows above 61000, so an ID-range test flags most of the table. ID
@@ -374,6 +374,37 @@ not discriminate in this build:
   rows lack display data, because `ItemSparse` ships incomplete and arrives by
   hotfix. Orphanhood alone would flag a quarter of the table. What is
   suspicious is a **coordinated removal** of orphans in a single push.
+- **The row is unreferenced.** Proposed after the 461xxx Thunder Clap ladder
+  turned out to be defined but unconsumed (finding #7). Measured before
+  writing it, across four ways of deciding which FK columns count as the
+  entity's own definition tables:
+
+  | Framing | Flags | Separates the two ladders? |
+  |---|---|---|
+  | coverage ≥ 50% of spells = definition | 10.4% | **no** — 461xxx scores 7 each |
+  | table name starts with `Spell` | 63.9% | yes |
+  | hand-picked player-reachability columns | 64.2% | yes |
+  | `SkillLineAbility` membership alone | 80.3% | yes |
+
+  Every framing that discriminates flags **two thirds to four fifths** of the
+  table — worse than the orphan test it was meant to generalise. The one with
+  a tolerable rate does not discriminate at all, and the coverage distribution
+  has no natural break to pin a threshold to: it runs smoothly from 99.95%
+  down to 0.00%.
+
+  The decisive measurement is that the rate is **flat across ID ranges**:
+  **63.5%** of classic-era spells (ID < 100k) are unreferenced and **63.5%** of
+  modern-ID spells (≥ 400k) are too. Being unreferenced carries no information
+  about whether a row is retail-era. Most spells in any build are NPC
+  abilities, triggered effects, item procs and internal auras that nothing is
+  supposed to reference — unreferenced is the **normal** state.
+
+  What is informative is a **paired** comparison: two rows with the same name
+  and rank where one is fully wired and the other is not. That is a judgement
+  about a specific pair, not a population test, and it does not reduce to a
+  confidence level. `contamination.inbound_references()` exposes the
+  measurement — declared-FK counts split into definition and external — and
+  deliberately assigns no confidence and produces no findings.
 
 ### Known cases in 1.60.1.69913
 
@@ -632,6 +663,14 @@ one lacks.
 **So the 461xxx ladder is defined but unconsumed:** unreachable from any skill
 line, unlabelled, not in a cooldown set, not gated by a player condition, not
 taught by anything, and triggered by nothing.
+
+> **Being unreferenced is not itself the signal.** Measured: 63.5% of all
+> spells in this build have no external reference, and the rate is identical
+> for classic-era and modern IDs. An unreferenced spell is unremarkable. What
+> is informative here is the **pairing** — two ladders with the same name and
+> the same six rank subtexts, one fully wired and one not. See the rejected
+> `unreferenced_entity` rule under **Retail contamination** for the base rates
+> that rule this out as a general test.
 
 `SpecializationSpells` is 204-empty, as expected for Classic, so it
 contributes nothing either way.
