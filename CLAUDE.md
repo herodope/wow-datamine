@@ -801,6 +801,7 @@ apply to the libraries.
 ```
 .
 ├── CLAUDE.md
+├── .claude/skills/wow-query/SKILL.md   # how to query wow.db, and the rules
 ├── README.md
 ├── builds.json              # manifest index — buildConfig/cdnConfig per build
 ├── scripts/
@@ -813,6 +814,7 @@ apply to the libraries.
 │   ├── extract_gametables.py# GameTables/*.txt -- NOT DB2s, see Key facts
 │   ├── enrich.py            # ID -> human-readable context, for the reports
 │   ├── build_db.py          # CSVs -> out/<build>/wow.db, one queryable file
+│   ├── query.py             # read-only SQL CLI over wow.db
 │   ├── render_patchnotes.py # self-contained HTML, hotfix + build-diff modes
 │   └── diff_builds.py       # compare two build dirs, emit markdown
 ├── out/                     # GITIGNORED — extracted data
@@ -874,6 +876,37 @@ At 1.60.1.69913: 1,263 tables, 3,844,494 rows, 4,210 indexes, ~317 MB, ~20s.
 69876 and 69893 load 1,262 — they have no `TimeEventData`, which exists only
 as hotfix data. `_build_info` records which build the file is for, so one
 cannot be mistaken for another.
+
+Ad-hoc questions go through `scripts/query.py`, which opens the file
+read-only:
+
+```bash
+python scripts/query.py "SELECT ID, Name_lang FROM SpellName LIMIT 5"
+python scripts/query.py --tables spell     # list matching tables + row counts
+python scripts/query.py --schema SpellEffect
+```
+
+`.claude/skills/wow-query/SKILL.md` carries the join paths and the query rules
+— FK resolution via `/dbc/relations` rather than value matching, array-suffixed
+FK columns, unverified columns, context-gated enums, base rates before signals,
+and that a missing table usually means "not in this build".
+
+> **`.claude/skills/wow-query/SKILL.md` is force-added, and that is
+> deliberate.** The global gitignore at `~/.config/git/ignore` excludes
+> `**/.claude/` as *per-project Claude Code state* — settings, caches, session
+> files — which is the right default and should stay.
+>
+> This file is not that. It is shared documentation: the schema's prefixes,
+> the join paths, and eight rules each derived from a measurement recorded in
+> this document. Anyone cloning the repo needs it to query `wow.db` without
+> repeating mistakes that are already written down — resolving FKs by value
+> and picking up numeric collisions, missing array-suffixed FK columns,
+> asserting a meaning for an unverified column, decoding a context-gated enum
+> without its gate.
+>
+> Committed with `git add -f`. If more files ever land under `.claude/` here,
+> add them the same way and only when they are documentation rather than
+> state — do not relax the global rule to cover them.
 
 ### `manifest.json` resolution values
 
