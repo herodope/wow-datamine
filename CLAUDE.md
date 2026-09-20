@@ -815,6 +815,7 @@ apply to the libraries.
 │   ├── enrich.py            # ID -> human-readable context, for the reports
 │   ├── build_db.py          # CSVs -> out/<build>/wow.db, one queryable file
 │   ├── query.py             # read-only SQL CLI over wow.db
+│   ├── mcp_server.py        # same database over MCP stdio, read-only
 │   ├── render_patchnotes.py # self-contained HTML, hotfix + build-diff modes
 │   └── diff_builds.py       # compare two build dirs, emit markdown
 ├── out/                     # GITIGNORED — extracted data
@@ -907,6 +908,50 @@ and that a missing table usually means "not in this build".
 > Committed with `git add -f`. If more files ever land under `.claude/` here,
 > add them the same way and only when they are documentation rather than
 > state — do not relax the global rule to cover them.
+
+### MCP server
+
+`scripts/mcp_server.py` exposes the same database over MCP stdio, for clients
+that cannot run `query.py` themselves. Needs `pip install mcp`.
+
+Four tools: `list_tables`, `describe_table`, `query`, `get_conventions`.
+
+- Read-only is the **driver's** guarantee, not a SQL check: the connection is
+  a `file:...?mode=ro` URI, and `ATTACH` is additionally denied by an
+  authorizer so a query cannot pull in a second, writable database. The
+  statement-shape check exists for clear error messages, not for safety.
+- `query` caps results at **100 rows** and says so when it truncates, and
+  refuses a query with neither `LIMIT` nor `WHERE` against a table over
+  10,000 rows. Aggregates without `GROUP BY` are exempt, so
+  `SELECT COUNT(*) FROM ItemSparse` works.
+- `get_conventions` returns the eight rules from
+  `.claude/skills/wow-query/SKILL.md` **verbatim**. It exists because an MCP
+  client cannot see the skill file, and without those rules it will reproduce
+  exactly the mistakes they were written to prevent.
+- Every response names the build it came from.
+
+Claude Desktop, in `claude_desktop_config.json` — `%APPDATA%\Claude\` on
+Windows, `~/Library/Application Support/Claude/` on macOS:
+
+```json
+{
+  "mcpServers": {
+    "wow-datamine": {
+      "command": "python",
+      "args": ["A:\\claude\\projects\\wow-datamine\\scripts\\mcp_server.py"]
+    }
+  }
+}
+```
+
+**Claude Desktop must be fully restarted after editing that file** — quit it,
+not just close the window. It reads the config once at startup, so an edit
+with the app still running does nothing, which is indistinguishable from a
+broken server.
+
+> Written against **mcp 2.x**, where `FastMCP` was renamed `MCPServer`
+> (`from mcp.server.mcpserver import MCPServer`). Examples written for 1.x
+> will not import; pin `mcp<2` only if you need that older code.
 
 ### `manifest.json` resolution values
 
