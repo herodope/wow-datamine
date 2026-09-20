@@ -153,6 +153,7 @@ def main(argv=None):
 
     preexisting = set(builds)
     added, skipped_foreign, already_known, dup_rows, reached = 0, 0, 0, 0, 0
+    near_misses = []
 
     for region in regions:
         if args.from_file:
@@ -172,9 +173,17 @@ def main(argv=None):
             if build is None:
                 continue
 
-            # Recycled product code: anything not matching the Forever rule is
-            # a different game entirely. Discard silently (logged at debug).
-            if not config.is_forever_build(build["version"], build["buildId"]):
+            # Recycled product code: a build failing the VERSION pattern is a
+            # different game entirely and is dropped quietly. A build passing
+            # the version pattern but failing the ID gate is a NEAR MISS and
+            # must NOT take the same path -- that is precisely how builds
+            # 69876 and 69893 went unnoticed for four days.
+            verdict, detail = config.classify_build(build["version"], build["buildId"])
+            if verdict == "near_miss":
+                config.warn_near_miss(build["version"], build["buildId"], detail)
+                near_misses.append(build)
+                continue
+            if verdict != "forever":
                 log(f"  discard (not Forever): {build['version']} build {build['buildId']}")
                 skipped_foreign += 1
                 continue
@@ -204,6 +213,20 @@ def main(argv=None):
         f"{already_known} unchanged, {dup_rows} duplicate region row(s), "
         f"{skipped_foreign} discarded as non-Forever"
     )
+
+    if near_misses:
+        # Repeated here as well as inline: a banner scrolls past when the
+        # version list is long, and this is the one line that must be read.
+        log("")
+        log(f"{len(near_misses)} NEAR MISS build(s) matched "
+            f"{config.FOREVER_VERSION_PATTERN} but failed the ID gate and were NOT recorded:")
+        for b in near_misses:
+            log(f"  {b['version']} build {b['buildId']}  "
+                f"buildConfig {b.get('buildConfig')}  cdnConfig {b.get('cdnConfig')}")
+        log("")
+        log("  If these are Forever, lower FOREVER_MIN_BUILD_ID in scripts/config.py")
+        log(f"  to {min(int(b['buildId']) for b in near_misses)} and re-run. "
+            f"The hashes above are unrecoverable once Blizzard rotates them.")
 
     if args.dry_run:
         log("--dry-run: builds.json not written")

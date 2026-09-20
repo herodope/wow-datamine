@@ -16,36 +16,16 @@ Outstanding:
 - [x] DBD directory configured — `definitionDir` points at
       `vendor/WoWDBDefs/definitions`, no longer the remote manifest
 - [x] `builds.json` seeded with 1.60.1.69913 (5a6cc43)
-- [ ] **Two earlier Forever builds exist and are not in `builds.json`.**
-      Measured 2026-09-20: `GET /build/list` returns **three** builds matching
-      `^1\.6\d\.`, not one —
-
-      | Version | Build | buildConfig | cdnConfig | First seen |
-      |---|---|---|---|---|
-      | 1.60.1 | 69876 | `e7fab7248766e9e7daddb3b6083c9c3c` | `272d201d5b2d6fec8fdb4aa59b2a9eea` | 2026-09-16 18:23 |
-      | 1.60.1 | 69893 | `5aa0eecfa8d49f5ad01221dbc8601144` | `c39a363b4a67449d8f16736dba987a43` | 2026-09-16 23:14 |
-      | 1.60.1 | 69913 | `6c0df97e8e481a9a41600e373367c200` | `1f946798ccc0e9281f9ac94e3539ada9` | 2026-09-18 03:02 |
-
-      **`FOREVER_MIN_BUILD_ID = 69900` rejects the first two.** They are
-      unambiguously Forever: 69876 is the build WoWDBDefs names this build's
-      unknown columns after (`Field_1_60_1_69876_055`), and the only version
-      lines on `wow_classic_beta` are 1.13, 1.60, 2.5, 3.4, 4.4 and 5.5 — so
-      `^1\.6\d\.` discriminates completely on its own and the build-ID gate
-      contributes nothing but false negatives.
-
-      Not changed unilaterally: the filter is a CRITICAL locked rule, and
-      lowering the threshold is a decision, not a fix. See the note under
-      **CRITICAL: build filtering**. Resolving this unblocks diffing, which
-      is the project's stated deliverable.
-- [ ] **`builds.json` and `/build/list` disagree on 69913's `cdnConfig`.**
-      `builds.json` has `5525ea1ce6668e895569c89c2d6a154c` (captured
-      2026-09-19 via `fetch_builds.py`); `/build/list` has
-      `1f946798ccc0e9281f9ac94e3539ada9` (WTL recorded it 2026-09-18).
-      `buildConfig` matches in both. A `cdnConfig` legitimately rotates
-      independently of the build, so two values for one build is expected
-      rather than wrong — but **only one of them was captured deliberately**,
-      and CLAUDE.md treats these hashes as unrecoverable once Blizzard rotates
-      them off the version list. Record both.
+- [x] Build filter corrected — `FOREVER_MIN_BUILD_ID` lowered to 69876 and
+      near misses now warn loudly instead of being dropped. See
+      **CRITICAL: build filtering**
+- [ ] **Two earlier Forever builds are known but not extracted.** 69876 and
+      69893 (hashes under **Known builds**) now pass the filter and are absent
+      from `builds.json` and `out/`. Both are off the live version list, so
+      they must be reached through their recorded `buildConfig`/`cdnConfig`,
+      which WTL's manual-build path can load. **Extracting either one makes
+      the first real diff possible** — the project's stated deliverable, and
+      the thing listed as blocked since the repo was created.
 
 ---
 
@@ -58,18 +38,35 @@ Outstanding:
 | Flavor folder | `_classic_beta_` |
 | TACT product code | `wow_classic_beta` |
 | CDN path | `tpr/wow` |
-| Beta started | 2026-09-17 |
+| Beta announced | 2026-09-17 — the **public** start |
+| First build on CDN | 2026-09-16 18:23 UTC (build 69876) |
 
-Storage is **CASC** (not MPQ).
+Storage is **CASC** (not MPQ). Builds predate the announcement by about a day:
+69876 and 69893 were both pushed on 09-16. Do not use 2026-09-17 as a lower
+bound when looking for builds — it is a press date, not a data date.
 
 ### Known builds
 
-| Version | Build | Build config | CDN config |
-|---|---|---|---|
-| 1.60.1 | 69913 | `6c0df97e8e481a9a41600e373367c200` | `5525ea1ce6668e895569c89c2d6a154c` |
+| Version | Build | First seen | Build config | CDN config |
+|---|---|---|---|---|
+| 1.60.1 | 69876 | 2026-09-16 18:23 | `e7fab7248766e9e7daddb3b6083c9c3c` | `272d201d5b2d6fec8fdb4aa59b2a9eea` |
+| 1.60.1 | 69893 | 2026-09-16 23:14 | `5aa0eecfa8d49f5ad01221dbc8601144` | `c39a363b4a67449d8f16736dba987a43` |
+| 1.60.1 | 69913 | 2026-09-18 03:02 | `6c0df97e8e481a9a41600e373367c200` | `5525ea1ce6668e895569c89c2d6a154c` |
 
 These hashes are the only way to reach a build after Blizzard rotates it off the
 live version list. Capture them every patch day, before anything else.
+
+69876 and 69893 come from WTL's archive (`GET /build/list`) and are **already
+off the live version list** — measured 2026-09-20, the versions endpoint
+returns only 69913, once per region. They are reachable now solely because WTL
+recorded them.
+
+> **A `cdnConfig` rotates independently of the build.** WTL recorded
+> `1f946798ccc0e9281f9ac94e3539ada9` for 69913 on 2026-09-18; the live
+> endpoint served `5525ea1ce6668e895569c89c2d6a154c` for the same build on
+> 2026-09-20. Both are real. The `buildConfig` is the stable identity; treat a
+> changed `cdnConfig` for an unchanged `buildConfig` as normal, and keep
+> whichever you captured rather than assuming one supersedes the other.
 
 ---
 
@@ -87,20 +84,51 @@ live version list. Capture them every patch day, before anything else.
 | 5.5.x | Mists of Pandaria Classic beta |
 | **1.60.x** | **Forever** — our target |
 
-`1.60` collides with nothing. A build belongs to Forever if and only if:
+**The version regex alone is the discriminator.** ✅ measured 2026-09-20 against
+`GET /build/list`: the complete set of version lines that have ever lived on
+this product code is **1.13, 1.60, 2.5, 3.4, 4.4 and 5.5**. Only 1.60 is
+Forever, and nothing else comes near it. A build belongs to Forever if:
 
 ```
 version matches  ^1\.6\d\.       (tolerant of a future 1.61 content patch)
-AND buildId >= 69900
 ```
 
-Anything else on this product is a **different game**. Discard it silently.
-Never diff across the boundary — comparing 1.60 against 5.5 produces meaningless
-noise. `diff_builds.py` must refuse to run if either build fails this filter.
+Anything failing that is a **different game**. Discard it quietly. Never diff
+across the boundary — comparing 1.60 against 5.5 produces meaningless noise.
+`diff_builds.py` must refuse to run if either build fails this filter.
 
-Do **not** filter on date alone; wago.tools backfills and re-indexes older
-builds. Build IDs are globally monotonic across all Blizzard products and are
-the reliable secondary check.
+Do **not** filter on date; wago.tools backfills and re-indexes older builds,
+and the beta's public start date is a day later than its first build.
+
+### The build-ID gate is a sanity check with a loud failure mode
+
+`FOREVER_MIN_BUILD_ID` (**69876**, the oldest build observed) is *not* how
+Forever is identified. It exists to catch one hypothetical: a future 1.6x
+build on this recycled product code that is **not** Forever. That has never
+happened.
+
+A build matching the version pattern but falling below the gate is a
+**near miss**, and near misses are never silent:
+
+| Verdict | `classify_build()` | Behaviour |
+|---|---|---|
+| `forever` | version matches, id ≥ gate | proceed |
+| `near_miss` | version matches, id < gate | **banner on stderr naming the build**, recorded in `config.NEAR_MISSES`, re-listed in `fetch_builds.py`'s summary with its hashes |
+| `foreign` | version does not match | dropped with a one-line log |
+
+**Why this matters more than the threshold.** The gate was `69900` until
+2026-09-20 — a round number chosen below the only build then known. It rejected
+builds **69876 and 69893**, which are real Forever builds, and it did so on the
+same code path and with the same silence as a Mists of Pandaria beta build. The
+two were invisible for four days, and with them the possibility of producing
+the first diff, which is this project's deliverable. They have since rotated
+off the live version list and survive only in WTL's archive.
+
+The defect was never the number. It was that a near miss and a different game
+were indistinguishable in the output. **If the threshold ever needs raising,
+something is wrong — lower it to match reality instead**, capture the build's
+`buildConfig`/`cdnConfig` immediately, and note that a near miss on a *higher*
+ID than anything seen is impossible by construction.
 
 > **The `>= 69900` half of this rule is measurably wrong and excludes real
 > Forever builds.** ✅ measured 2026-09-20 against `/build/list`: three builds
