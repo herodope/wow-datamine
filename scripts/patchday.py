@@ -264,12 +264,21 @@ def step7_extract_dbcs(version, dry):
 
 
 def step8_extract(version, dry):
-    step(8, "extract_db2.py and inventory.py")
+    step(8, "extract_db2.py, inventory.py and extract_gametables.py")
     run([SCRIPTS / "extract_db2.py", "--build", version] if version else [SCRIPTS / "extract_db2.py"],
         dry, label="extract_db2.py")
     log("")
     run([SCRIPTS / "inventory.py", "--build", version] if version else [SCRIPTS / "inventory.py"],
         dry, label="inventory.py")
+    log("")
+    # Must follow inventory.py: discovery reads files.csv. GameTables are not
+    # DB2s and have no DBD definition, so extract_db2.py can never see them --
+    # /listfile/db2s enumerates definitions. 42 of them at 1.60.1.69913.
+    log("  GameTables are tab-separated text, invisible to the DB2 pipeline.")
+    log("  SpellScaling.txt lives here -- the DB2 of that name ships empty.")
+    run([SCRIPTS / "extract_gametables.py", "--build", version] if version
+        else [SCRIPTS / "extract_gametables.py"],
+        dry, label="extract_gametables.py")
 
 
 def step9_diff(version, previous, dry):
