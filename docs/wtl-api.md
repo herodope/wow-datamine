@@ -536,7 +536,7 @@ WTL's console for the same call:
 ```
 WARNING: You are using a local DBD definitions directory, updating can not be
 done through WTL itself.
-Reloading definitions from directory A:\...\vendor\WoWDBDefs\definitions
+Reloading definitions from directory C:\path\to\wow-datamine\vendor\WoWDBDefs\definitions
 Loaded 1342 definitions from definitions folder!
 Loaded 531 relations and 12 label columns
 ```

@@ -34,7 +34,7 @@ Outstanding:
 | | |
 |---|---|
 | Game | World of Warcraft: Forever (Classic+) |
-| Install root | see `scripts/config.py` (`INSTALL_ROOT`) |
+| Install root | `config.INSTALL_ROOT` — stock Battle.net path by default; override with the `WOW_INSTALL_ROOT` env var |
 | Flavor folder | `_classic_beta_` |
 | TACT product code | `wow_classic_beta` |
 | CDN path | `tpr/wow` |
@@ -962,7 +962,7 @@ Windows, `~/Library/Application Support/Claude/` on macOS:
   "mcpServers": {
     "wow-datamine": {
       "command": "python",
-      "args": ["A:\\claude\\projects\\wow-datamine\\scripts\\mcp_server.py"]
+      "args": ["C:\\path\\to\\wow-datamine\\scripts\\mcp_server.py"]
     }
   }
 }

@@ -5,6 +5,7 @@ CDN host or a build-filter rule. If Blizzard moves Forever to a dedicated
 product code, that is a one-line change here.
 """
 
+import os as _os
 import re
 import sys as _sys
 from pathlib import Path
@@ -16,7 +17,12 @@ from pathlib import Path
 # that has lived on this product.
 PRODUCT_CODE = "wow_classic_beta"
 
-INSTALL_ROOT = Path(r"A:\World of Warcraft")
+# WoW install root -- the folder holding .build.info, NOT the flavor folder.
+# Override with the WOW_INSTALL_ROOT environment variable; the default is the
+# stock Battle.net location. WTL reads the same path from its own config.json
+# (see README), so if you set one, set both.
+DEFAULT_INSTALL_ROOT = r"C:\Program Files (x86)\World of Warcraft"
+INSTALL_ROOT = Path(_os.environ.get("WOW_INSTALL_ROOT", DEFAULT_INSTALL_ROOT))
 FLAVOR_DIR = "_classic_beta_"
 GAME_DIR = INSTALL_ROOT / FLAVOR_DIR
 

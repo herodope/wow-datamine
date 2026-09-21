@@ -4,6 +4,10 @@ out/
 # Cloned third-party tools (WTL, TACTSharp, DBCD, WoWDBDefs, listfile, TACTKeys).
 vendor/
 
+# Local Claude Code state -- machine-specific paths and permissions.
+# The wow-query skill IS committed; only local settings are ignored.
+.claude/settings.local.json
+
 # Python
 __pycache__/
 *.py[cod]

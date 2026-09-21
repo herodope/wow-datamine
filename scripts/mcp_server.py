@@ -40,7 +40,7 @@ Claude Desktop, in `claude_desktop_config.json`:
       "mcpServers": {
         "wow-datamine": {
           "command": "python",
-          "args": ["A:\\\\claude\\\\projects\\\\wow-datamine\\\\scripts\\\\mcp_server.py"]
+          "args": ["C:\\\\path\\\\to\\\\wow-datamine\\\\scripts\\\\mcp_server.py"]
         }
       }
     }
