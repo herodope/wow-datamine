@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: QuestXPSweep
+## Notes: Asks the server for every quest ID so the client writes a full questcache.wdb at logout.
+## Author: herodope
+## Version: 1.0.0
+## SavedVariables: QuestXPSweepDB
+
+QuestIDs.lua
+QuestXPSweep.lua
