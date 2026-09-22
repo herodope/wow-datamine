@@ -330,6 +330,7 @@ def main(argv=None):
     ap.add_argument("--build", help="version string; defaults to WTL's loaded build")
     ap.add_argument("--restart", action="store_true", help="ignore the checkpoint and re-extract everything")
     ap.add_argument("--limit", type=int, help="only the first N tables (smoke test)")
+    ap.add_argument("--tables", help="comma-separated subset; resolved against the build-filtered list")
     ap.add_argument("--workers", type=int, default=config.MAX_WORKERS)
     ap.add_argument("--allow-non-forever", action="store_true", help="skip the Forever build filter")
     args = ap.parse_args(argv)
@@ -369,6 +370,32 @@ def main(argv=None):
 
     tables = fetch_table_list(build)
     log(f"{len(tables)} table(s) in the build-filtered list")
+
+    if args.tables:
+        # Resolve against the build-filtered list rather than passing the
+        # caller's spelling straight to /dbc/export. A name that is not in this
+        # build must fail loudly here: exported, it would come back 404 and be
+        # recorded as "not_in_build", which reads exactly like a table the
+        # build genuinely does not ship.
+        by_lower = {t.lower(): t for t in tables}
+        wanted, missing = [], []
+        for raw in args.tables.split(","):
+            name = raw.strip()
+            if not name:
+                continue
+            resolved = by_lower.get(name.lower())
+            wanted.append(resolved) if resolved else missing.append(name)
+        if missing:
+            log("")
+            log(f"not in {build}'s table list: {', '.join(missing)}")
+            log("  Exported anyway these would 404 and be logged as not_in_build,")
+            log("  which is indistinguishable from a genuine absence.")
+            log("")
+            raise SystemExit(2)
+        seen = set()
+        tables = [t for t in wanted if not (t in seen or seen.add(t))]
+        log(f"--tables: extracting {len(tables)} of them")
+
     if args.limit:
         tables = tables[: args.limit]
         log(f"--limit {args.limit}: extracting {len(tables)}")

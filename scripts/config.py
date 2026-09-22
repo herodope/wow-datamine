@@ -151,7 +151,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILDS_JSON = REPO_ROOT / "builds.json"   # committed — buildConfig/cdnConfig per build
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 OUT_DIR = REPO_ROOT / "out"               # gitignored — extracted data
-REPORTS_DIR = REPO_ROOT / "reports"       # committed — diff output
+REPORTS_DIR = REPO_ROOT / "reports"       # gitignored — generated diff output
 VENDOR_DIR = REPO_ROOT / "vendor"         # cloned third-party tools
 
 

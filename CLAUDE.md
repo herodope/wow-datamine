@@ -63,6 +63,20 @@ day* under the patch-day checklist):
 |---|---|---|---|---|
 | 2026-09-19 18:08 / 19:07 | 26,542 | (baseline) | — | `reports/hotfix_1.60.1.69913.md` |
 | 2026-09-21 17:45 / 19:33 | 571 | 112156, 112189, 112200, 112201, 112203, 112209 | 8 | `reports/hotfixwave_1.60.1.69913_since_20260919.html` |
+| 2026-09-22 12:18 / 13:31 | 75 | 112210 | 3 | `reports/hotfixwave_1.60.1.69913_since_20260921.html` |
+
+The 09-22 wave is small and worth reading as a shape rather than as content:
+4 items given display data, 5 BroadcastText gossip rows, and one real push
+(112210) that invalidated 51 QuestObjective / QuestPOIBlob / QuestPOIPoint
+records **this build does not carry** — `QuestObjective` exports 204/empty
+and `QuestPOIBlob` holds 54 rows nowhere near the 564183+ range invalidated.
+Inert here. Per the ID-range rule under *Retail contamination*, that is a
+measurement and not a contamination verdict.
+
+It was also captured with the client still running. WTL's `HotfixManager`
+globs the exact filename `DBCache.bin` and never the session buffer
+`DBCache.bin<pid>.tmp`, which the client holds under an exclusive lock, so a
+wave measured mid-session is a lower bound. Log out before the extract.
 
 The 09-21 wave is the first measured on this repo: 31 records under six real
 push IDs, 540 bulk-injected item records under synthetic IDs, and 8 tables
@@ -902,9 +916,10 @@ apply to the libraries.
 │       ├── gametables/*.txt    # tab-separated, NOT DB2s — see Key facts
 │       ├── wow.db              # SQLite over all of the above, rebuildable
 │       └── manifest.json       # row counts, layouthashes, metrics
-├── reports/                 # COMMITTED — diff output
+├── reports/                 # GITIGNORED — generated diff output
 │   ├── <from>_to_<to>.md
 │   ├── hotfix_<build>.md
+│   ├── hotfixwave_<build>_since_<date>.html
 │   ├── patchnotes_<build>.html          # readable, self-contained
 │   └── patchnotes_<from>_to_<to>.html
 └── vendor/                  # GITIGNORED — cloned third-party tools

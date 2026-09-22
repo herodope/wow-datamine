@@ -21,3 +21,10 @@
 # (from mcp.server.mcpserver import MCPServer). Code written against 1.x will
 # not import, and examples found online are usually 1.x.
 mcp>=2.0,<3
+
+# Chart rendering only -- scripts/spell_gap.py, which writes out/spell_gap.png.
+# Not needed for extraction, diffing, reporting, build_db.py, query.py or
+# add_build.py, and `spell_gap.py --no-png` still produces the CSV and the
+# detail JSON without it. Kept below the line for the same reason `mcp` is:
+# nothing on the patch-day path can be broken by it.
+matplotlib>=3.7

@@ -12,9 +12,16 @@ vendor/
 __pycache__/
 *.py[cod]
 
+# Generated diff output. Every file here is reproducible from builds.json plus
+# a local extraction, and the HTML renders run to hundreds of KB of inlined
+# base64 icon art that churns on every regeneration.
+reports/
+
+# Quest XP sweep: the in-game addon, its parser, and the questcache.wdb
+# captures copied out of the client between sessions.
+questxp/
+
 # Committed, never ignore — listed for intent, these are the deliverables:
 #   builds.json   manifest index, unrecoverable once Blizzard rotates a build
 #   scripts/      the pipeline
-#   reports/      diff output, the actual product of this repo
 !builds.json
-!reports/

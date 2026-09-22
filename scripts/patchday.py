@@ -313,7 +313,7 @@ def step9_diff(version, previous, dry):
 
     # The HTML pages render the same data for reading rather than auditing.
     # They run AFTER the markdown diffs, not instead of them: the markdown is
-    # the committed record, the HTML is the thing you send someone.
+    # the auditable record, the HTML is the thing you send someone.
     log("")
     log("  render_patchnotes.py : the same data as readable patch notes")
     if version:
@@ -343,22 +343,35 @@ def step9b_findings(version, dry):
 
 
 def step10_commit(version, reports, dry, push):
-    step(10, "Commit builds.json and the new report(s)")
+    step(10, "Commit builds.json")
 
-    paths = [str(config.BUILDS_JSON)] + [str(p) for p in reports]
-    msg = f"data: {version or '<new build>'} build index and diff reports"
+    # reports/ is gitignored: the files are regenerated from builds.json plus a
+    # local extraction, so only the index is committed. Passing an ignored path
+    # to `git add` explicitly makes it ABORT THE WHOLE COMMAND -- builds.json
+    # would go unstaged too, and the only symptom would be this step saying
+    # "nothing staged". The reports are listed for the log, never staged.
+    paths = [str(config.BUILDS_JSON)]
+    msg = f"data: {version or '<new build>'} build index"
 
     if dry:
         log(f"  [dry-run] would: git add {' '.join(paths)}")
         log(f"  [dry-run] would: git commit -m {msg!r}")
         log(f"  [dry-run] would: git push" if push else "  [dry-run] would NOT push")
+        if reports:
+            log(f"  [dry-run] {len(reports)} report(s) written, gitignored, not staged")
         return
+
+    if reports:
+        log("  written locally, gitignored, not staged:")
+        for r in reports:
+            log(f"    {r}")
+        log("")
 
     subprocess.run(["git", "add"] + paths, cwd=str(config.REPO_ROOT))
     staged = subprocess.run(["git", "diff", "--cached", "--name-only"],
                             cwd=str(config.REPO_ROOT), capture_output=True, text=True).stdout.strip()
     if not staged:
-        log("  nothing staged -- builds.json and reports are unchanged. Not committing.")
+        log("  nothing staged -- builds.json is unchanged. Not committing.")
         return
     log("  staged:")
     for line in staged.splitlines():
