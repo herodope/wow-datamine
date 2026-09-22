@@ -56,6 +56,18 @@ bound when looking for builds — it is a press date, not a data date.
 These hashes are the only way to reach a build after Blizzard rotates it off the
 live version list. Capture them every patch day, before anything else.
 
+**Hotfix waves on 69913** (realm downtime, no client patch — see *Hotfix-only
+day* under the patch-day checklist):
+
+| Wave | Records | Real pushes | Tables moved | Report |
+|---|---|---|---|---|
+| 2026-09-19 18:08 / 19:07 | 26,542 | (baseline) | — | `reports/hotfix_1.60.1.69913.md` |
+| 2026-09-21 17:45 / 19:33 | 571 | 112156, 112189, 112200, 112201, 112203, 112209 | 8 | `reports/hotfixwave_1.60.1.69913_since_20260919.html` |
+
+The 09-21 wave is the first measured on this repo: 31 records under six real
+push IDs, 540 bulk-injected item records under synthetic IDs, and 8 tables
+whose exported rows actually moved.
+
 69876 and 69893 come from WTL's archive (`GET /build/list`) and are **already
 off the live version list** — measured 2026-09-20, the versions endpoint
 returns only 69913, once per region. They are reachable now solely because WTL
@@ -459,8 +471,8 @@ here. Check these IDs; keep the population figure as context only.
 
 ## Findings to verify
 
-Dated predictions from 1.60.1.69913, recorded **2026-09-20** so the next build
-can confirm or kill them. Each entry states what was observed, what would
+Dated predictions from 1.60.1.69913, recorded **2026-09-20** (finding 8 added
+**2026-09-21**) so the next build can confirm or kill them. Each entry states what was observed, what would
 confirm it, and what would falsify it. **Resolve these before adding new ones**
 — an unresolved prediction is worth more than a new guess.
 
@@ -738,6 +750,46 @@ withdrawn.
 - whether they are pruned instead, the way the `Achievement` and `Item`
   contamination was
 - whether any hotfix touches them; nothing does at 1.60.1.69913
+
+### 8. Six `BroadcastText` rows arrived with no hotfix record — UNEXPLAINED
+
+The 2026-09-21 hotfix wave (no client patch; same `buildConfig`) added **11**
+rows to `BroadcastText`. `/dbc/hotfixes/list` accounts for **5** of them —
+304793–304797, push 112203, the Lorthuna/Belathaan conversation.
+
+The other six have **no entry in the hotfix list at all** — not under
+`BroadcastText`, not at any push ID:
+
+| ID | Text (truncated) |
+|---|---|
+| 2660 | "Naralex sleeps again!…" |
+| 8111 | "My wind riders are trained to fly quickly through the hot Ba…" |
+| 8112 | "The Barrens, with its hot sun and hostile denizens…" |
+| 8122 | "You haven't lived until you've looked down on the world from…" |
+| 10031 | "Many are the paths of the Earth Mother…" |
+| 10032 | "Treat the wind rider well as it takes you to your destinatio…" |
+
+**They are not shipped client data surfacing late.** Checked individually
+against all three exports: absent from `db2/BroadcastText.csv` (plain), absent
+from the 09-19 overlay snapshot, present in the 09-21 overlay. So the overlay
+genuinely gained them in this window.
+
+Coincidence worth ruling out before theorising: 8111, 8112 and 8122 also exist
+as **`Item`** hotfix records detected 09-19. Same integers, different table —
+`Item` 8111 tells you nothing about `BroadcastText` 8111.
+
+**Do not assert a mechanism.** Plausible-but-unverified readings include a push
+whose table attribution WTL resolved elsewhere, or overlay content reaching the
+client by a path that does not register a `DBCache` record. Both are guesses.
+Nothing was measured that distinguishes them, and `tableIsKnown` is 1 for every
+record in the window, which argues against a simple unknown-table-hash story.
+
+**Watch:**
+
+- whether the next wave shows the same gap, and in which tables
+- whether these six ever acquire a hotfix record retroactively
+- whether the count of "changed rows with no hotfix record" on the wave page
+  stays at 6 or grows — `render_patchnotes.py --since` reports it per wave
 
 ---
 
@@ -1233,6 +1285,53 @@ regions but `cn` can lag or diverge.
    does all four.
 9. Diff against the previous Forever build.
 10. Commit `builds.json` and the new report.
+
+### Hotfix-only day (downtime with no new build)
+
+Blizzard takes the realms down "for fixes" and the version endpoint still
+serves the **same `buildConfig`**. Nothing was patched; the hotfix overlay
+moved. The build-to-build diff has nothing to say, and the standard hotfix
+report (overlay vs shipped client) answers the wrong question — it restates
+every hotfix ever applied to this build, so today's wave is invisible inside
+it.
+
+Diff the overlay against **its own previous state** instead. The baseline is a
+copy of `db2_hotfixed/` taken *before* the re-extract, so it must be made
+first and cannot be recovered afterwards:
+
+```bash
+B=1.60.1.69913
+cp -rp out/$B/db2_hotfixed out/$B/db2_hotfixed.snapshot-$(date +%Y%m%d)
+python scripts/extract_db2.py --build $B --restart
+python scripts/render_patchnotes.py --build $B --since <YYYYMMDD>
+```
+
+`--since` is the third renderer mode. Both sides are live data, so on that page
+`rows_plain` is **the previous live state, not the shipped build**.
+
+- **Snapshot before extracting, always.** A re-extract overwrites
+  `db2_hotfixed/` in place. Skip the copy and the previous live state is gone
+  — the same class of unrecoverable miss as not capturing `buildConfig`.
+- **A re-extract on an unchanged build is cheap.** 13s for all 1161 tables,
+  measured 2026-09-21, because WTL serves the exports from cache. There is no
+  reason to extract selectively.
+- **Do not drive the wave diff off `/dbc/hotfixes/list`.** Scan every CSV.
+  Measured 2026-09-21: the list reported new records in **19** tables while
+  only **8** tables' exported rows actually moved, and it named **5**
+  `BroadcastText` records against **11** rows that appeared. Trusting it would
+  have invented 11 empty tables and missed 6 real additions.
+- **`firstDetected` is when WTL first saw a record, not when Blizzard pushed
+  it.** It is an upper bound on push time. The wave page uses the baseline
+  directory's mtime as the cutoff and says so; do not present the window as
+  push times.
+- Re-run `diff_hotfixes.py`, `inventory.py` and `build_db.py` afterwards — the
+  cumulative report, manifest and database all describe the old overlay until
+  you do. `inventory.py` will print its "file set did not change" banner; on a
+  hotfix-only day that is the correct result, not a failure.
+- **`build_db.py` cannot replace `wow.db` while `mcp_server.py` is running.**
+  Windows holds the file open even for a read-only connection, `os.replace`
+  fails with `WinError 5`, and the rebuilt database is left as `wow.db.tmp`.
+  Stop the MCP server, then re-run.
 
 ---
 

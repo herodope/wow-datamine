@@ -23,10 +23,18 @@ learned the hard way and are recorded in CLAUDE.md:
   * A column WoWDBDefs marks unverified is rendered with a visual marker and
     its raw value only. Never an interpretation, never a decoded name.
 
-Two modes:
+Three modes:
 
-    hotfix     one build, shipped client vs live hotfix overlay
-    build diff two builds, shipped vs shipped
+    hotfix      one build, shipped client vs live hotfix overlay
+    build diff  two builds, shipped vs shipped
+    hotfix wave one build, two overlay snapshots -- what a downtime with no
+                new build actually changed. Both sides are live data, so
+                `rows_plain` is the PREVIOUS live state, not the shipped
+                build. Requires a snapshot preserved before the re-extract:
+
+                    cp -rp out/<b>/db2_hotfixed                            out/<b>/db2_hotfixed.snapshot-<date>
+                    python scripts/extract_db2.py --build <b> --restart
+                    python scripts/render_patchnotes.py --since <date>
 
 The build-diff page is usually sparse, and that is rendered as the result
 rather than padded out. 69876 -> 69913 changes 2 of 610 tables and every
@@ -38,6 +46,7 @@ Usage:
     python scripts/render_patchnotes.py
     python scripts/render_patchnotes.py --build 1.60.1.69913
     python scripts/render_patchnotes.py --from 1.60.1.69876 --to 1.60.1.69913
+    python scripts/render_patchnotes.py --since 20260919
     python scripts/render_patchnotes.py --no-icons     # skip the fetch
 """
 
@@ -45,6 +54,7 @@ import argparse
 import base64
 import html
 import json
+import pathlib
 import sys
 import time
 import urllib.error
@@ -56,7 +66,8 @@ import config
 import contamination
 import enrich
 import diff_builds
-from diff_hotfixes import diff_table
+from diff_hotfixes import (SYNTHETIC_PUSH_BASE, diff_table, fetch_hotfixes,
+                           status_label)
 
 ICON_TIMEOUT = 20
 
@@ -64,6 +75,10 @@ ICON_TIMEOUT = 20
 # The rest go in the collapsed raw table. 4,218 hotfix-only ItemSparse rows
 # would be a 20 MB page with an icon each, and unreadable besides.
 SHOWCASE = 36
+
+# Overlay snapshots preserved before a re-extract, so a later run can diff one
+# hotfix wave against the previous live state instead of against the client.
+SNAPSHOT_PREFIX = "db2_hotfixed.snapshot-"
 
 # WoW item quality colours. Canonical values -- recognisability beats theme
 # purity here, a player knows these on sight.
@@ -78,7 +93,14 @@ SECTIONS = [
     ("achievements", "Achievements", ["Achievement", "Achievement_Category"]),
     ("lighting", "Lighting", ["Light", "LightData", "LightParams",
                               "LightDataGlobalVolumeFog"]),
-    ("strings", "Strings", ["GlobalStrings", "BroadcastText"]),
+    ("strings", "Strings & dialogue", ["GlobalStrings", "BroadcastText",
+                                       "ConversationLine", "Conversation"]),
+    ("spells", "Spells", ["SpellMisc", "SpellTargetRestrictions", "SpellEffect",
+                          "SpellName", "SpellCooldowns", "SpellPower"]),
+    ("reputation", "Reputation", ["Faction", "FactionTemplate"]),
+    ("creatures", "Creatures", ["Creature", "CreatureDifficulty"]),
+    ("quests", "Quests", ["QuestV2", "QuestV2CliTask", "QuestObjective",
+                          "QuestPOIBlob", "QuestPOIPoint", "PlayerCondition"]),
     ("events", "Events", ["TimeEventData"]),
 ]
 
@@ -139,18 +161,74 @@ class Icons:
 # --- Model ------------------------------------------------------------------
 
 
-def build_model(build, e, icons, manifest):
-    """Everything the page renders, computed once."""
+def snapshot_dir(build, since):
+    """Resolve --since to a directory holding a previous hotfix overlay.
+
+    Accepts a bare snapshot name (`db2_hotfixed.snapshot-20260919`), the date
+    suffix alone (`20260919`), or any path. A missing directory is fatal: the
+    alternative is silently diffing the overlay against itself and rendering
+    "nothing changed", which is the one answer this mode must never invent.
+    """
     out_dir = config.build_out_dir(build)
-    plain_dir, hot_dir = out_dir / "db2", out_dir / "db2_hotfixed"
+    for cand in (pathlib.Path(since),
+                 out_dir / since,
+                 out_dir / f"{SNAPSHOT_PREFIX}{since}"):
+        if cand.is_dir():
+            return cand
+    log(f"no such snapshot: {since}")
+    log(f"  looked in {out_dir} for {since!r} and "
+        f"{SNAPSHOT_PREFIX + str(since)!r}")
+    existing = sorted(d.name for d in out_dir.glob(f"{SNAPSHOT_PREFIX}*"))
+    log(f"  available: {', '.join(existing) if existing else '(none)'}")
+    raise SystemExit(2)
 
-    delta_tables = sorted(
-        t for t, v in manifest["tables"].items() if v.get("hotfix_delta"))
-    log(f"  {len(delta_tables)} table(s) with a hotfix delta")
 
+def scan_wave_tables(baseline_dir, hot_dir):
+    """Tables whose overlay data differs between two snapshots.
+
+    Deliberately scans every CSV rather than trusting the hotfix list to name
+    the affected tables. Measured 2026-09-21: the list reported new records in
+    19 tables while only 8 tables' exported rows actually moved, and it named
+    5 BroadcastText records against 11 rows that appeared. Driving the diff
+    off the list would have missed 6 real additions and invented 11 empty
+    tables.
+    """
+    names = sorted({p.stem for p in baseline_dir.glob("*.csv")}
+                   | {p.stem for p in hot_dir.glob("*.csv")})
+    log(f"  scanning {len(names)} table(s) for overlay movement")
     results = {}
-    for t in delta_tables:
-        results[t] = diff_table(t, plain_dir, hot_dir)
+    for t in names:
+        res = diff_table(t, baseline_dir, hot_dir)
+        if res["magnitude"]:
+            results[t] = res
+    return results
+
+
+def build_model(build, e, icons, manifest, baseline=None):
+    """Everything the page renders, computed once.
+
+    With `baseline`, this is a hotfix-WAVE page: one build, two overlay
+    snapshots, answering "what did today's downtime change" rather than
+    "what does the overlay change against the shipped client". The `plain`
+    side of every diff is the older overlay, so `rows_plain` is the previous
+    live state, not the shipped build.
+    """
+    out_dir = config.build_out_dir(build)
+    hot_dir = out_dir / "db2_hotfixed"
+
+    if baseline is not None:
+        plain_dir = baseline
+        results = scan_wave_tables(plain_dir, hot_dir)
+        delta_tables = sorted(results)
+        log(f"  {len(delta_tables)} table(s) moved since the snapshot")
+    else:
+        plain_dir = out_dir / "db2"
+        delta_tables = sorted(
+            t for t, v in manifest["tables"].items() if v.get("hotfix_delta"))
+        log(f"  {len(delta_tables)} table(s) with a hotfix delta")
+        results = {}
+        for t in delta_tables:
+            results[t] = diff_table(t, plain_dir, hot_dir)
 
     model = {
         "build": build,
@@ -158,6 +236,9 @@ def build_model(build, e, icons, manifest):
         "results": results,
         "sections": [],
         "headline": [],
+        "mode": "wave" if baseline is not None else "hotfix",
+        "baseline": baseline,
+        "wave": None,
     }
 
     claimed = set()
@@ -172,10 +253,114 @@ def build_model(build, e, icons, manifest):
         model["sections"].append({"key": "other", "title": "Other systems",
                                   "tables": other})
 
+    if baseline is not None:
+        model["wave"] = wave_attribution(baseline, results,
+                                         manifest.get("tables") or {})
     model["headline"] = headline(model, e)
     model["items_showcase"] = item_showcase(model, e, icons)
     model["contamination"] = run_contamination(build, e, results)
     return model
+
+
+def wave_attribution(baseline, results, manifest_tables=None):
+    """Which hotfix pushes landed after the baseline snapshot was taken.
+
+    The cutoff is the snapshot directory's mtime. `firstDetected` is when WTL
+    first SAW a record, not when Blizzard pushed it, so this window is "new to
+    us since the snapshot" -- an upper bound on push time and a lower bound on
+    nothing. Stated on the page rather than papered over.
+
+    Returns None when WTL is unreachable: an unattributed wave is still a
+    readable wave, and a page that silently dropped the push IDs would look
+    identical to one where Blizzard issued none.
+    """
+    cutoff = datetime.fromtimestamp(baseline.stat().st_mtime, timezone.utc)
+    index, total = fetch_hotfixes()
+    if not index:
+        return None
+
+    fresh = []          # (table, record_id, push, status, detected)
+    for (table, record_id), entries in index.items():
+        for push, status, detected in entries:
+            try:
+                seen = datetime.fromisoformat(detected).replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            if seen > cutoff:
+                fresh.append((table, record_id, push, status, detected))
+
+    pushes = {}
+    synthetic = {}
+    for table, record_id, push, status, detected in fresh:
+        if push == SYNTHETIC_PUSH_BASE + record_id:
+            synthetic[table] = synthetic.get(table, 0) + 1
+            continue
+        p = pushes.setdefault(push, {"push": push, "records": [],
+                                     "detected": detected, "tables": set()})
+        p["records"].append((table, record_id, status))
+        p["tables"].add(table)
+        p["detected"] = min(p["detected"], detected)
+
+    for p in pushes.values():
+        p["records"].sort()
+        p["tables"] = sorted(p["tables"])
+
+    # The hotfix list lowercases nothing itself, but fetch_hotfixes() keys on
+    # tableName.lower(). Recover the real casing from the diff where possible
+    # and from the manifest otherwise -- a table can appear in the hotfix list
+    # without any of its rows moving, so `results` alone does not cover it.
+    proper = {t.lower(): t for t in (manifest_tables or {})}
+    proper.update({t.lower(): t for t in results})
+    def name(t):
+        return proper.get(t, t)
+
+    # Tables the list names vs tables whose rows actually moved, and the same
+    # question per record. A gap either way is a finding, not a rounding error
+    # -- see scan_wave_tables(). The record-level check is the one that bites:
+    # a table can be correctly listed and still have unlisted rows in it.
+    listed = {t for t, _r, _p, _s, _d in fresh}
+    moved = {t.lower() for t in results}
+    listed_records = {(t, r) for t, r, _p, _s, _d in fresh}
+
+    unexplained = []
+    for table, res in sorted(results.items()):
+        touched = [(k, "added") for k in res["added"]]
+        touched += [(k, "removed") for k in res["removed"]]
+        touched += [(k, "changed") for k, _d in res["changed"]]
+        for key, how in touched:
+            try:
+                rid = int(key)
+            except ValueError:
+                continue
+            if (table.lower(), rid) not in listed_records:
+                unexplained.append((table, rid, how))
+    unexplained.sort()
+
+    # Status mix for tables that were listed but whose rows did not move. The
+    # obvious reading is "all invalidated", and on 2026-09-21 that was true of
+    # 8 of 11 such tables but NOT of the three carrying bulk item records.
+    # Measure it; do not assert it.
+    quiet = {}
+    for table, record_id, push, status, _detected in fresh:
+        if table in listed - moved:
+            q = quiet.setdefault(table, {"valid": 0, "invalidated": 0})
+            q["valid" if status == 1 else "invalidated"] += 1
+
+    return {
+        "proper": proper,
+        "cutoff": cutoff,
+        "records": len(fresh),
+        "hotfix_total": total,
+        "pushes": sorted(pushes.values(), key=lambda p: p["push"]),
+        "synthetic": dict(sorted(synthetic.items())),
+        "synthetic_total": sum(synthetic.values()),
+        "listed_tables": sorted(listed),
+        "listed_not_moved": sorted(listed - moved),
+        "moved_not_listed": sorted(name(t) for t in moved - listed),
+        "quiet": dict(sorted(quiet.items())),
+        "unexplained": unexplained,
+        "windows": sorted({d[:16] for _t, _r, _p, _s, d in fresh}),
+    }
 
 
 def headline(model, e):
@@ -183,7 +368,8 @@ def headline(model, e):
     out, r = [], model["results"]
 
     for t, res in sorted(r.items()):
-        if model["manifest"]["tables"][t].get("resolution") == "hotfix_only":
+        mf_t = model["manifest"]["tables"].get(t) or {}
+        if mf_t.get("resolution") == "hotfix_only":
             out.append({
                 "kind": "hotfix_only", "table": t,
                 "title": f"{t} exists only as live hotfix data",
@@ -193,13 +379,20 @@ def headline(model, e):
                          f"contains it."),
             })
 
+    wave = model.get("mode") == "wave"
+
     for t in ("ItemSparse", "ItemSearchName"):
         res = r.get(t)
         if res and res["added"]:
             out.append({
                 "kind": "additions", "table": t,
-                "title": f"{len(res['added']):,} rows added to {t} by hotfix",
-                "body": (f"{res['rows_plain']:,} rows shipped, "
+                "title": (f"{len(res['added']):,} rows added to {t} in this wave"
+                          if wave else
+                          f"{len(res['added']):,} rows added to {t} by hotfix"),
+                "body": (f"{res['rows_plain']:,} rows live before this wave, "
+                         f"{res['rows_hotfixed']:,} after."
+                         if wave else
+                         f"{res['rows_plain']:,} rows shipped, "
                          f"{res['rows_hotfixed']:,} after the overlay."),
             })
 
@@ -220,10 +413,14 @@ def headline(model, e):
                 names.append(f"{k} ({lbl})" if lbl else str(k))
             out.append({
                 "kind": "removals", "table": t,
-                "title": f"{len(res['removed'])} row(s) removed from {t} by hotfix",
-                "body": "Removed live but still present in the shipped client: "
-                        + ", ".join(names)
-                        + ("…" if len(res["removed"]) > 3 else ""),
+                "title": (f"{len(res['removed'])} row(s) withdrawn from {t} "
+                          f"in this wave" if wave else
+                          f"{len(res['removed'])} row(s) removed from {t} by hotfix"),
+                "body": (("Live before this wave, gone from the overlay after it: "
+                          if wave else
+                          "Removed live but still present in the shipped client: ")
+                         + ", ".join(names)
+                         + ("…" if len(res["removed"]) > 3 else "")),
             })
     return out
 
@@ -409,6 +606,8 @@ code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font
 .note{border-left:3px solid var(--warn);background:var(--panel-2);
   padding:10px 14px;margin:10px 0;font-size:13.5px;color:var(--ink-dim);border-radius:0 6px 6px 0}
 .note strong{color:var(--warn)}
+.warn-note{border-left:3px solid var(--bad);background:var(--panel-2);padding:10px 14px;margin:10px 0;font-size:13.5px;color:var(--ink);border-radius:0 6px 6px 0}
+.warn-note strong{color:var(--bad)}
 table{border-collapse:collapse;width:100%;font-size:13px;margin:8px 0}
 th,td{text-align:left;padding:6px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--ink-faint);font-weight:600;font-size:11px;letter-spacing:.05em;text-transform:uppercase}
@@ -512,6 +711,129 @@ def render_contamination(c):
                  f"<td class='mono'>{esc(f['record'])}</td>"
                  f"<td>{esc(f['detail'])}</td></tr>")
     L.append("</tbody></table>")
+    return "\n".join(L)
+
+
+def render_wave_pushes(w, e):
+    """The hotfix pushes behind this wave, and what the list does not explain."""
+    if w is None:
+        return ('<h2 id="pushes">Hotfix pushes</h2><div class="note">'
+                "<strong>No push attribution.</strong> WTL was unreachable, so "
+                "the pushes behind these changes could not be read. The data "
+                "diff above is unaffected — it comes from the CSVs on disk.</div>")
+
+    L = ['<h2 id="pushes">Hotfix pushes</h2>']
+    L.append(f"<p class='sub'>{w['records']:,} hotfix record(s) newly detected "
+             f"since the baseline snapshot, out of {w['hotfix_total']:,} the "
+             f"client knows for this build. "
+             f"{len(w['pushes'])} real push ID(s); "
+             f"{w['synthetic_total']:,} record(s) carry a synthetic push ID "
+             f"derived from the record ID rather than issued by a push.</p>")
+
+    if w["windows"]:
+        L.append(f"<p class='sub'>Detection window(s): "
+                 f"{esc(', '.join(w['windows']))} UTC. "
+                 f"<strong>firstDetected is when WTL first saw a record, not "
+                 f"when Blizzard pushed it</strong> — treat these as "
+                 f"“new to us since "
+                 f"{esc(w['cutoff'].isoformat())}”, not as push times.</p>")
+
+    if w["pushes"]:
+        L.append("<table><thead><tr><th>Push</th><th>Records</th>"
+                 "<th>Tables</th><th>What it touched</th></tr></thead><tbody>")
+        for p in w["pushes"]:
+            cells = []
+            for table, record_id, status in p["records"][:14]:
+                lbl = e.label(table, str(record_id))
+                shown = f"{w['proper'].get(table, table)}:{record_id}"
+                if lbl:
+                    shown += f" ({lbl})"
+                cells.append(f"{shown} [{status_label(status)}]")
+            more = len(p["records"]) - 14
+            if more > 0:
+                cells.append(f"… +{more} more")
+            L.append(f"<tr><td class='mono'>{p['push']}</td>"
+                     f"<td>{len(p['records'])}</td>"
+                     f"<td class='mono'>"
+                     f"{esc(', '.join(w['proper'].get(t, t) for t in p['tables']))}"
+                     f"</td>"
+                     f"<td class='mono dim'>{esc('; '.join(cells))}</td></tr>")
+        L.append("</tbody></table>")
+
+    if w["synthetic"]:
+        L.append("<h3>Bulk-injected records (synthetic push IDs)</h3>")
+        L.append("<p class='sub'>A synthetic ID is <code>2^24 + recordID</code>. "
+                 "Counting these as pushes invents authoring events that never "
+                 "happened, so they are reported as one bulk load per table.</p>")
+        L.append("<p class='mono dim'>"
+                 + esc(", ".join(f"{t} ×{n:,}"
+                                 for t, n in w["synthetic"].items()))
+                 + "</p>")
+
+    # Convention: a gap between what the list names and what the data does is
+    # rendered as a finding. Silence here would read as agreement.
+    if w["listed_not_moved"]:
+        rows = []
+        for t in w["listed_not_moved"]:
+            q = w["quiet"].get(t) or {}
+            rows.append(f"{w['proper'].get(t, t)} "
+                        f"({q.get('valid', 0)} valid, "
+                        f"{q.get('invalidated', 0)} invalidated)")
+        any_valid = any((w["quiet"].get(t) or {}).get("valid")
+                        for t in w["listed_not_moved"])
+        L.append('<div class="note"><strong>'
+                 f"{len(w['listed_not_moved'])} table(s) have new hotfix "
+                 "records but unchanged exported rows.</strong> "
+                 + esc(", ".join(rows)) + ". "
+                 + ("An invalidated record leaving the data untouched is "
+                    "unsurprising. Records marked <em>valid</em> that change "
+                    "nothing are not, and some here are valid — so "
+                    "“invalidated, therefore inert” does not explain "
+                    "this set. Mechanism unverified; the row counts are the "
+                    "measurement."
+                    if any_valid else
+                    "Every record here is invalidated rather than valid, which "
+                    "is consistent with a withdrawn or no-op override — "
+                    "but the mechanism is not verified and the row counts are "
+                    "the measurement.")
+                 + " Blizzard touched these tables; the client-visible data "
+                   "did not move.</div>")
+
+    if w["moved_not_listed"]:
+        L.append('<div class="warn-note"><strong>'
+                 f"{len(w['moved_not_listed'])} table(s) moved with no hotfix "
+                 "record naming them.</strong> "
+                 + esc(", ".join(w["moved_not_listed"])) + ".</div>")
+
+
+    if w["unexplained"]:
+        by_table = {}
+        for table, record_id, how in w["unexplained"]:
+            by_table.setdefault(table, []).append((record_id, how))
+        L.append('<div class="warn-note"><strong>'
+                 f"{len(w['unexplained'])} changed row(s) have no hotfix record "
+                 "at all.</strong> These rows moved between the two overlay "
+                 "snapshots, but <code>/dbc/hotfixes/list</code> holds no entry "
+                 "for them — not under this table, not at any push ID. "
+                 "They are also absent from the plain export, so they are not "
+                 "shipped client data surfacing late. "
+                 "<strong>Unexplained.</strong> Recorded rather than reconciled "
+                 "away: a wave driven off the hotfix list alone would have "
+                 "missed them entirely.</div>")
+        L.append("<table><thead><tr><th>Table</th><th>Rows</th>"
+                 "</tr></thead><tbody>")
+        for table, entries in sorted(by_table.items()):
+            shown = []
+            for record_id, how in entries[:24]:
+                lbl = e.label(table, str(record_id))
+                shown.append(f"{record_id} ({how}"
+                             + (f", {lbl}" if lbl else "") + ")")
+            if len(entries) > 24:
+                shown.append(f"… +{len(entries) - 24} more")
+            L.append(f"<tr><td class='mono'>{esc(table)}</td>"
+                     f"<td class='mono dim'>{esc(', '.join(shown))}</td></tr>")
+        L.append("</tbody></table>")
+
     return "\n".join(L)
 
 
@@ -846,29 +1168,62 @@ def render(model, e, icons):
 
     L = ["<!DOCTYPE html>", '<html lang="en"><head><meta charset="utf-8">',
          '<meta name="viewport" content="width=device-width,initial-scale=1">',
-         f"<title>{esc(m['build'])} patch notes</title>",
+         f"<title>{esc(m['build'])} "
+         f"{'hotfix wave' if m.get('mode') == 'wave' else 'patch notes'}</title>",
          FAVICON,
          f"<style>{CSS}</style></head><body><div class='wrap'>"]
 
+    wave = m.get("mode") == "wave"
+    w = m.get("wave")
+
     L.append(f"<h1>World of Warcraft: Forever — {esc(m['build'])}</h1>")
-    L.append(f"<p class='sub'>Live hotfix changes against the shipped client. "
-             f"Generated {esc(now)} from local extraction.</p>")
+    if wave:
+        # The point of this page is that the build did NOT change. Say it in
+        # the subtitle, not three screens down.
+        L.append(f"<p class='sub'><strong>Hotfix wave on an unchanged "
+                 f"client.</strong> The build is identical either side of this "
+                 f"diff — same buildConfig, same client bytes. Both sides are "
+                 f"live overlay snapshots: before is "
+                 f"<code>{esc(m['baseline'].name)}</code>, after is the current "
+                 f"overlay. Generated {esc(now)} from local extraction.</p>")
+    else:
+        L.append(f"<p class='sub'>Live hotfix changes against the shipped client. "
+                 f"Generated {esc(now)} from local extraction.</p>")
 
     L.append('<div class="stats">')
-    for k, v in (("Tables changed", len(m["results"])),
+    if wave:
+        stats = (("Tables moved", len(m["results"])),
+                 ("Hotfix records", (w or {}).get("records")),
+                 ("Real pushes", len((w or {}).get("pushes") or [])
+                  if w else None),
+                 ("Bulk records", (w or {}).get("synthetic_total")))
+    else:
+        stats = (("Tables changed", len(m["results"])),
                  ("Tables ok", totals.get("ok")),
                  ("Tables empty", totals.get("empty")),
-                 ("Rows shipped", totals.get("rows_plain"))):
+                 ("Rows shipped", totals.get("rows_plain")))
+    for k, v in stats:
         if isinstance(v, int):
             L.append(f'<div class="stat"><div class="v">{v:,}</div>'
                      f'<div class="k">{esc(k)}</div></div>')
     L.append("</div>")
+
+    if wave and not m["results"]:
+        # An empty wave is a result. Render it as one rather than an empty page.
+        L.append('<div class="note"><strong>No exported row changed.</strong> '
+                 "Every table is byte-identical between the two overlay "
+                 "snapshots. If the hotfix list below shows records, they were "
+                 "withdrawals or no-ops; if it is also empty, nothing reached "
+                 "this client.</div>")
 
     if m["headline"]:
         L.append('<h2 id="headline">Headline</h2>')
         for h in m["headline"]:
             L.append(f'<div class="card"><h4><span class="tag">{esc(h["table"])}</span>'
                      f'{esc(h["title"])}</h4><p>{esc(h["body"])}</p></div>')
+
+    if wave:
+        L.append(render_wave_pushes(w, e))
 
     L.append(render_contamination(m["contamination"]))
 
@@ -879,9 +1234,10 @@ def render(model, e, icons):
         for t in sec["tables"]:
             L.append(render_table_details(t, m["results"][t], e))
 
-    L.append(render_inventory(mf))
+    if not wave:
+        L.append(render_inventory(mf))
 
-    gt = mf.get("gametables")
+    gt = mf.get("gametables") if not wave else None
     if gt:
         L.append('<h2 id="gametables">GameTables</h2>')
         L.append(f"<p class='sub'>{gt.get('count', 0)} tab-separated table(s), "
@@ -916,15 +1272,22 @@ def main(argv=None):
                                     "defaults to the newest extracted")
     ap.add_argument("--from", dest="from_build", help="build-diff mode: older build")
     ap.add_argument("--to", dest="to_build", help="build-diff mode: newer build")
+    ap.add_argument("--since", metavar="SNAPSHOT",
+                    help="hotfix-wave mode: diff the current overlay against a "
+                         "preserved overlay snapshot under out/<build>/ "
+                         "(name, date suffix, or path) instead of against the "
+                         "shipped client")
     ap.add_argument("--no-icons", action="store_true", help="skip icon fetching")
     ap.add_argument("--out", help="output path; defaults under reports/")
     args = ap.parse_args(argv)
 
     if bool(args.from_build) != bool(args.to_build):
         ap.error("--from and --to must be given together")
+    if args.since and args.from_build:
+        ap.error("--since is a one-build mode; it cannot be combined with "
+                 "--from/--to")
 
     started = time.monotonic()
-    import pathlib
 
     if args.from_build:
         # Build diff. No icons: nothing here is an item card, and a page that
@@ -947,9 +1310,18 @@ def main(argv=None):
         if icons.enabled and not e.wtl.probe():
             log(f"  WTL unreachable ({e.wtl.reason}) -- rendering without icons")
             icons.enabled = False
-        model = build_model(e.build, e, icons, load_manifest(e.build))
+        baseline = snapshot_dir(e.build, args.since) if args.since else None
+        if baseline is not None:
+            log(f"hotfix wave: {baseline.name} -> current overlay")
+        model = build_model(e.build, e, icons, load_manifest(e.build),
+                            baseline=baseline)
         html_text = render(model, e, icons)
-        default = config.REPORTS_DIR / f"patchnotes_{e.build}.html"
+        if baseline is not None:
+            stamp = baseline.name.replace(SNAPSHOT_PREFIX, "")
+            default = (config.REPORTS_DIR
+                       / f"hotfixwave_{e.build}_since_{stamp}.html")
+        else:
+            default = config.REPORTS_DIR / f"patchnotes_{e.build}.html"
 
     config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     path = pathlib.Path(args.out) if args.out else default
