@@ -67,7 +67,7 @@ import contamination
 import enrich
 import diff_builds
 from diff_hotfixes import (SYNTHETIC_PUSH_BASE, diff_table, fetch_hotfixes,
-                           status_label)
+                           key_index, key_rows, load_csv, status_label)
 
 ICON_TIMEOUT = 20
 
@@ -258,6 +258,7 @@ def build_model(build, e, icons, manifest, baseline=None):
                                          manifest.get("tables") or {})
     model["headline"] = headline(model, e)
     model["items_showcase"] = item_showcase(model, e, icons)
+    model["items_provenance"] = items_provenance(results, out_dir / "db2")
     model["contamination"] = run_contamination(build, e, results)
     return model
 
@@ -446,6 +447,42 @@ def item_showcase(model, e, icons):
             "icon": icons.get(info["icon_fdid"]),
         })
     return out
+
+
+def items_provenance(results, client_db2):
+    """Do the hotfix-added ItemSparse rows belong to items the client already has?
+
+    An addition to ItemSparse is NOT a new item. `Item` is the base record and
+    ships essentially complete; `ItemSparse` carries name, item level, quality
+    and stats and ships deliberately incomplete, with the remainder supplied
+    live. So "4,308 added" read as "4,308 new items" is wrong by the whole
+    number -- measured 2026-09-21, all 4,308 already had a base Item row.
+
+    Always measured against the CLIENT's db2/Item.csv, never against the diff's
+    `plain` side: in wave mode that side is an earlier overlay, which would
+    answer a different question.
+
+    Returns None when there is nothing to say.
+    """
+    res = results.get("ItemSparse")
+    if not res or not res["added"]:
+        return None
+    header, rows = load_csv(client_db2 / "Item.csv")
+    if header is None:
+        return None
+    idx, _col = key_index(header)
+    shipped = set(key_rows(rows, idx, "Item.csv (client)"))
+
+    with_base = sum(1 for k in res["added"] if k in shipped)
+    item_res = results.get("Item")
+    removed = item_res["removed"] if item_res else []
+    return {
+        "added": len(res["added"]),
+        "with_base": with_base,
+        "without_base": len(res["added"]) - with_base,
+        "item_removed": len(removed),
+        "overlap": len(set(res["added"]) & set(removed)),
+    }
 
 
 def run_contamination(build, e, results):
@@ -877,9 +914,34 @@ def render_items(model, e):
     res = model["results"].get("ItemSparse")
     if not show and not res:
         return ""
+    prov = model.get("items_provenance")
+    wave = model.get("mode") == "wave"
     L = []
     if show:
-        L.append(f"<h3>{len(show)} of {len(res['added']):,} added items</h3>")
+        # "added items" was the old heading, and it read as "new items shipped".
+        # It is an ItemSparse row count, and the table right below it is Item,
+        # which moves independently -- name the table and say what added means.
+        L.append(f"<h3>{len(show)} of {len(res['added']):,} items given display "
+                 f"data by hotfix "
+                 f"<span class='tag'>ItemSparse</span></h3>")
+        if prov:
+            if prov["without_base"] == 0:
+                L.append(f'<p class="sub">Not new items. All '
+                         f'{prov["added"]:,} already have a base '
+                         f'<code>Item</code> row in the shipped client; what '
+                         f'arrived {"in this wave" if wave else "by hotfix"} is '
+                         f'their name, item level, quality and stats. '
+                         f'<code>ItemSparse</code> ships deliberately '
+                         f'incomplete and is filled in live, so an addition '
+                         f'here means <em>display data supplied</em>, not '
+                         f'<em>item created</em>.</p>')
+            else:
+                L.append(f'<p class="sub">{prov["with_base"]:,} of '
+                         f'{prov["added"]:,} already have a base '
+                         f'<code>Item</code> row in the shipped client — for '
+                         f'those, what arrived is display data, not a new '
+                         f'item. The other {prov["without_base"]:,} have no '
+                         f'base row and may be genuinely new.</p>')
         L.append('<div class="grid">')
         for it in show:
             colour, qname = QUALITY.get(it["quality"], ("#dfe3ec", "?"))
@@ -900,6 +962,20 @@ def render_items(model, e):
         if len(res["added"]) > len(show):
             L.append(f'<p class="sub">Showing {len(show)} of '
                      f'{len(res["added"]):,}; the rest are in the raw table below.</p>')
+
+    # The Item table sits directly below this section and moves independently.
+    # Left unexplained, its row reads as a contradiction of the count above.
+    if prov and prov["item_removed"]:
+        L.append(f'<div class="note"><strong>The <code>Item</code> table '
+                 f'moved the other way: {prov["item_removed"]} row(s) '
+                 f'removed.</strong> That is a different table from '
+                 f'<code>ItemSparse</code> above, and a different set of rows '
+                 f'— {"no IDs appear" if not prov["overlap"] else str(prov["overlap"]) + " ID(s) appear"} '
+                 f'in both. <code>Item</code> losing rows and '
+                 f'<code>ItemSparse</code> gaining them is not a '
+                 f'contradiction: one is the base record being withdrawn '
+                 f'live, the other is display data being filled in.</div>')
+
     return "\n".join(L)
 
 
