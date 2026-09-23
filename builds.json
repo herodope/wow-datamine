@@ -25,5 +25,13 @@
     "region": "us",
     "firstSeen": "2026-09-19T21:12:34+00:00",
     "source": "version-endpoint"
+  },
+  "69977": {
+    "version": "1.60.1.69977",
+    "buildId": 69977,
+    "buildConfig": "3bd89ce2721f7c75e7525dc83741076f",
+    "cdnConfig": "ed440cc894be6d92a02f076fa00ce2f5",
+    "region": "us",
+    "firstSeen": "2026-09-23T12:59:28+00:00"
   }
 }

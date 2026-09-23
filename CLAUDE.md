@@ -52,6 +52,7 @@ bound when looking for builds — it is a press date, not a data date.
 | 1.60.1 | 69876 | 2026-09-16 18:23 | `e7fab7248766e9e7daddb3b6083c9c3c` | `272d201d5b2d6fec8fdb4aa59b2a9eea` |
 | 1.60.1 | 69893 | 2026-09-16 23:14 | `5aa0eecfa8d49f5ad01221dbc8601144` | `c39a363b4a67449d8f16736dba987a43` |
 | 1.60.1 | 69913 | 2026-09-18 03:02 | `6c0df97e8e481a9a41600e373367c200` | `5525ea1ce6668e895569c89c2d6a154c` |
+| 1.60.1 | 69977 | 2026-09-23 (captured) | `3bd89ce2721f7c75e7525dc83741076f` | `ed440cc894be6d92a02f076fa00ce2f5` |
 
 These hashes are the only way to reach a build after Blizzard rotates it off the
 live version list. Capture them every patch day, before anything else.
