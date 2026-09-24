@@ -19,13 +19,16 @@ Outstanding:
 - [x] Build filter corrected — `FOREVER_MIN_BUILD_ID` lowered to 69876 and
       near misses now warn loudly instead of being dropped. See
       **CRITICAL: build filtering**
-- [ ] **Two earlier Forever builds are known but not extracted.** 69876 and
-      69893 (hashes under **Known builds**) now pass the filter and are absent
-      from `builds.json` and `out/`. Both are off the live version list, so
-      they must be reached through their recorded `buildConfig`/`cdnConfig`,
-      which WTL's manual-build path can load. **Extracting either one makes
-      the first real diff possible** — the project's stated deliverable, and
-      the thing listed as blocked since the repo was created.
+- [x] The two earlier builds, 69876 and 69893, are extracted and in
+      `builds.json`, so every Forever build seen has a diff.
+- [x] **1.60.1.70009 (2026-09-24) is the first content build.** The builds
+      before it changed 0–2 tables each. 70009 changes 155 of 611 tables,
+      moves the file set (+240 / −401), and moves encryption (+13). See
+      `reports/patchday_1.60.1.70009.md`. It was extracted **before the client
+      was launched on it**, so its hotfix overlay is unmeasured.
+- [ ] **Measure 70009's hotfix overlay.** Log in once, log out, snapshot
+      `db2_hotfixed/`, `GET /dbc/reloadHotfixes`, re-extract with
+      `--restart`. Findings #1, #3 and #8 stay unmeasured on 70009 until then.
 
 ---
 
@@ -384,6 +387,14 @@ Track these per build; movement is signal.
 A **drop in encrypted file count** means keys leaked or content unlocked — one
 of the highest-value early signals in beta datamining. Log it every build.
 
+Encrypted-file history (the `EncryptedUnknownKey` / `EncryptedButNot` split
+matters as much as the total; see finding #6):
+
+| Build | Files | Encrypted | UnknownKey | ButNot |
+|---|--:|--:|--:|--:|
+| 69876 – 69977 | 1,441,771 | 5,035 | 3,371 | 1,664 |
+| **70009** | 1,441,610 | **5,048** | **3,385** | 1,663 |
+
 ### Known benign errors
 
 These FDIDs throw "Specified argument was out of the range of valid values"
@@ -410,9 +421,23 @@ how much they actually discriminate:
 
 | Rule | Confidence | What it catches |
 |---|---|---|
-| `dangling_map_ref` | HIGH | A row references a Map ID absent from this build. Exactly 1 of 233 `Achievement` rows hits this — near-zero false positives |
+| `dangling_map_ref` | **MEDIUM** (added rows) / HIGH (removed rows) | A row references a Map ID absent from this build. Was HIGH on the 69913 measurement (1 of 233 `Achievement` rows, near-zero false positives). **1.60.1.70009 broke that**: 8 added `Achievement` rows hit it, and the Shaper's Terrace, Alcaz Prison, Hyjal Summit and Barrow Deeps boss statistics are unreleased **Forever** dungeons whose `Map` rows are withheld, not retail leftovers |
+| `withheld_map_ref` | LOW | The same, but the absent map has `MapDifficulty` rows in this build, so the map exists and only its definition is withheld. Maps 2994 and 3001 at 70009. For watching, not a contamination verdict |
 | `light_absent_map` | HIGH | A `LightParams` ID whose only referencing `Light` rows sit on absent maps |
 | `orphan_removal` | MEDIUM | Rows pulled together in one push that carry no supporting display data |
+
+**Appearing vs leaving.** Both reports now split findings in two. Rows that
+were **added** (or values that are newly referenced) are *appearing*. Rows that
+were **removed** (or `LightParams` values being **replaced**) are *leaving*:
+contamination being cleaned out, which is a fix, not a new finding. The first
+70009 report mixed the Zaela removal into the same table as the new dungeon
+statistics, which made the cleanup read like new contamination.
+
+**An absent map no longer means retail.** Before 70009, every reference to a
+missing map was retail. From 70009 on, Blizzard withholds Forever's own `Map`
+rows too, so the two cases look identical to this rule. Judge each hit by
+name and context. Treat a MEDIUM `dangling_map_ref` as a lead to check, not a
+verdict.
 
 **Three rules deliberately not implemented**, because measurement showed they
 do not discriminate in this build:
@@ -464,6 +489,17 @@ do not discriminate in this build:
 | `LightParams` 453 | Referenced only by `Light` 16161 on map 3064, which does not exist here. Replaced by 7641 (Kalimdor) in `Light` 269 | 112132, valid |
 | 75 `Item` stubs | All `ClassID` 4 / `SubclassID` 0 — 32 trinkets, 23 rings, 20 necks — with no display data, pulled in one push | 112078, invalidated |
 
+**Status at 1.60.1.70009** (client data, measured 2026-09-24):
+
+| Record | 70009 client |
+|---|---|
+| `Achievement` 9275 + category 15233 | **gone.** Removed in the client, so the hotfix was a stopgap |
+| `LightParams` 453 | **Kalimdor use fixed in the client**: `Light` 269 now carries 7641, as the hotfix did. The `LightParams` row survives, still used by the retail-map `Light` 16161 (map 3064) |
+| `LightParams` 495 | new case, same pattern: `Light` 253 (Kalimdor) moved 495 → 7831 in the client. 495 is still used by `Light` 15752 on the absent map 3008 |
+| 75 `Item` stubs | all 75 still in the client |
+| `AreaTable` 16870 "Archimonde's Fall" (map 3049) | removed in the client |
+| `Map` 451 "Development Land" + `MapDifficulty` 38 + 335 `world/maps/development` files | removed in the client |
+
 The 75 IDs, so this can be checked exactly rather than by population count
 (`scripts/check_findings.py` reads them from here):
 
@@ -492,6 +528,22 @@ Dated predictions from 1.60.1.69913, recorded **2026-09-20** (finding 8 added
 confirm it, and what would falsify it. **Resolve these before adding new ones**
 — an unresolved prediction is worth more than a new guess.
 
+> **Checked against 1.60.1.70009 on 2026-09-24**, from the client data only:
+> the client had not been launched on 70009, so there was no hotfix overlay.
+> Resolved: #2 (shipped) and #6 (first real test). Partly resolved: #5.
+> Unchanged: #4 and #7. Unmeasured without an overlay: #1, #3 and #8.
+>
+> **`check_findings.py` misreads a build with no overlay.** When the overlay
+> is missing, the live data *is* the client data. It then reported #3 as
+> RESOLVED ("ships in the client") when the client still held the same 5 items.
+> It also reported #2 as "still live-only" when the rename had shipped. Both
+> are the same mistake as 69977's first run. Before trusting a verdict, check
+> that the manifest's `hotfix_delta` count is non-zero.
+>
+> The parser reads these entries by regex. The first backticked `Field_…`
+> name, `Achievement` ID and `LightParams` ID in this section must stay the
+> finding's own values. Put new IDs *after* them.
+
 ### 1. A weekly event schedule starting 12 October 2026
 
 `TimeEventData` is **hotfix-only** (ships empty, push 112079) and holds exactly
@@ -511,7 +563,10 @@ cadence), and whether the table ships populated in the client rather than
 arriving by hotfix. A shifted date means the schedule slipped; a fourth row
 means the cadence is ongoing rather than a three-week run.
 
-### 2. A shard/world mechanic being repositioned
+**70009:** still empty (204) in the client, so the schedule does not ship
+in the build. The live rows are unmeasured because there was no overlay.
+
+### 2. A shard/world mechanic being repositioned — RESOLVED at 70009 (shipped)
 
 Three `GlobalStrings` rows changed under one push (112128), all the same rename:
 
@@ -531,6 +586,18 @@ for the mechanic, and whether "shard" wording survives anywhere. If the rename
 is cosmetic, expect nothing further; if the mechanic is being reworked, expect
 more strings and possibly a new table.
 
+**Resolved 2026-09-24 against 1.60.1.70009.** All three rows now carry the
+"refresh" wording in the **client** DB2. 69977's client still had "Transfer
+Now" / "…transferred to another shard…". The hotfix was the rename landing
+early, not a trial. The **cosmetic** reading won: no further "refresh"
+strings arrived, and 26 strings with "shard" in them survive in both builds.
+The same build did add ruleset wording that belongs to the same
+server-partitioning family. `SUPER_DISTRICT_TITLE` went from "Choose Your
+Gameplay Style" to "Choose Your Gameplay Ruleset", and
+`SUPER_DISTRICT_DESCRIPTION` now reads "You will only be able to interact
+with players who choose the same ruleset." That is a separate system, not
+evidence for this finding. Close it out at the next cleanup.
+
 ### 3. The vanilla PvP rank ladder arrived by bulk injection
 
 1,385 modern-ID `ItemSparse` additions, of which **481 carry vanilla PvP rank
@@ -545,6 +612,11 @@ hotfix. Shipping in the client means the feature is settled; arriving by hotfix
 again means it is still being staged. Also watch whether the ladder grows —
 the vanilla honor system has 14 ranks per faction, so an incomplete set now
 implies more to come.
+
+**70009: not shipped.** The client still holds **5** modern-ID rank-titled
+items, the same as 69977. Whether the other 481 still arrive live is
+unmeasured, because there was no overlay. `check_findings.py` reported this
+as RESOLVED; that verdict is the no-overlay artifact described above.
 
 ### 4. LightData column 055 — LEANING FALSIFIED, do not assert
 
@@ -588,7 +660,10 @@ the reading entirely.
 and whether `mapping.dbdm` gains a `COLOR` entry for it. Re-check both after
 every `sync_refs.py` run.
 
-### 5. Three open retail-contamination cases
+**70009:** WoWDBDefs merged the build (`cf84e01`). The column is still
+unnamed, and `mapping.dbdm` still has no entry for it. Unchanged.
+
+### 5. Three open retail-contamination cases — PARTLY RESOLVED at 70009
 
 See the section above for evidence. All three are open as of 1.60.1.69913:
 
@@ -606,7 +681,21 @@ confirms the hotfix was a stopgap ahead of a real fix — and whether new
 contamination appears. `scripts/contamination.py` reports this automatically;
 a *new* HIGH-confidence finding is the thing to look at.
 
-### 6. The encrypted-count detector is untested and reports MATCH
+**Checked against the 1.60.1.70009 client (2026-09-24):**
+
+| Record | 70009 client |
+|---|---|
+| Achievement 9275 + category 15233 | **gone. Confirmed: the hotfix was a stopgap** |
+| LightParams 453 | **Kalimdor fix shipped**: Light 269 carries 7641, as the hotfix did. The row itself survives, used only by the retail-map Light 16161 |
+| 75 Item stubs | **all 75 still present** |
+
+Two of the three are fixed, at least for the use that mattered in 453's
+case. The 75 stubs are what is left to watch. The same build also pulled
+AreaTable 16870 (map 3049), the Development Land map, and a second
+light case (495, see **Known cases**). The contamination rule itself had to
+change for 70009; see **Retail contamination**.
+
+### 6. The encrypted-count detector — TESTED at 70009, and it moved
 
 `inventory.py` compares the encrypted-file count against a hardcoded baseline
 of **5035** and prints `MATCH` or `DIFFERS`. It has now passed on three builds:
@@ -665,6 +754,41 @@ At 1.60.1.69913 this correctly reads: `encrypted 5,035 (vs 5,035 in
 1.60.1.69893: MATCH)`, `file set unchanged`, followed by the NOTE. **The
 detector is still untested** — that does not change until a build arrives whose
 file set actually moves. 1.60.2 remains the first real test.
+
+**Resolved 2026-09-24: 1.60.1.70009 was the first real test.** It came as a
+1.60.1 build, not 1.60.2. The file set moved (1,441,771 → 1,441,610; +240
+added, −401 removed), so the count was a real measurement:
+
+| Status | 69977 | 70009 | Delta |
+|---|--:|--:|--:|
+| `EncryptedUnknownKey` | 3,371 | 3,385 | **+14** |
+| `EncryptedButNot` | 1,664 | 1,663 | −1 |
+| Total | 5,035 | 5,048 | +13 |
+
+The +14 accounts exactly:
+- **+7**: new unnamed files, FDIDs 8473060 and 8473797–8473802.
+- **+6**: DB2s that gained unknown-key sections: `Mount`, `MountXDisplay`,
+  `Vehicle`, `VehicleSeat`, `GlobalStrings` and
+  `CreatureDisplayInfoGeosetData`. These are hidden rows.
+- **+3 / −2**: files that moved between the two statuses.
+
+A new `TactKeyLookup` row, 8347, also shipped. It moved **up**, so new
+locked content shipped and no keys leaked. The per-status split was needed
+here: the two statuses moved in opposite directions.
+
+**The detector nearly failed silently on its first real test.**
+`extract_db2.py` rewrote `manifest.json` wholesale and erased the inventory
+section. Every hotfix-day re-extract did this, so 69913 and 69977 had none.
+`inventory.py` then printed "no previous build to compare against" for the
+encrypted count, while comparing the file set against 69977 on the next
+line. It was fixed on 2026-09-24:
+- `write_manifest()` now carries forward any key it does not own.
+- `baseline_from()` recomputes the baseline from the previous build's
+  `files.csv` when its manifest has no inventory section.
+
+Re-run, 70009 reads `encrypted 5,048 (vs 5,035 in 1.60.1.69977: DIFFERS)`.
+Close this finding out; the encryption table under **Baseline metrics**
+carries it forward.
 
 ### 7. A parallel Thunder Clap rank ladder at modern IDs
 
@@ -767,6 +891,10 @@ withdrawn.
   contamination was
 - whether any hotfix touches them; nothing does at 1.60.1.69913
 
+**70009:** unchanged. The same 8 `SpellName` rows are in 461800–461835, and 0
+`SkillLineAbility` rows point at 461810–461830. The ladder was not wired up,
+and not pruned either.
+
 ### 8. Six `BroadcastText` rows arrived with no hotfix record — UNEXPLAINED
 
 The 2026-09-21 hotfix wave (no client patch; same `buildConfig`) added **11**
@@ -806,6 +934,38 @@ record in the window, which argues against a simple unknown-table-hash story.
 - whether these six ever acquire a hotfix record retroactively
 - whether the count of "changed rows with no hotfix record" on the wave page
   stays at 6 or grows — `render_patchnotes.py --since` reports it per wave
+
+**70009:** unmeasured, because there was no overlay. The 69977 patch-day
+report has a hypothesis: `BroadcastText` fills in on demand as the client meets
+NPCs, which would explain these six. It is still untested.
+
+### 9. Four Forever dungeons named, with their `Map` rows withheld (added 2026-09-24)
+
+1.60.1.70009 added boss-kill statistics (`Achievement` category 14821) for
+instances that have **no `Map` row and no `AreaTable` rows** in the client:
+
+| Map | Instance | Statistics | Other data in the client |
+|--:|---|---|---|
+| 3001 | Shaper's Terrace | 63574, 63590, 63592, 63593 (Nanaya, Cinder, Bolt, Snowtalon) | `MapDifficulty` 6015, 6345 |
+| 2994 | Alcaz Prison | 63575 (Blazeroar) | `MapDifficulty` 6008, 6343 |
+| 2981 | Hyjal Summit | 63580 (The Wild King) | none |
+| 3052 | Barrow Deeps | 63581 (Sonya Darkhallow) | none |
+
+These map definitions are being **withheld**, not forgotten: two of the four
+already have difficulty rows. In the same build, six DB2s gained sections
+encrypted under an unknown key, and a new `TactKeyLookup` row shipped (see #6).
+Reading, **not measured**: the `Map` rows may be among the encrypted
+content. Nothing ties a specific encrypted section to these maps.
+
+**Watch:**
+
+- whether `Map` rows for 2981, 2994, 3001 and 3052 appear, whether in the
+  client, by hotfix, or through a key release that lowers
+  `EncryptedUnknownKey`
+- whether the `MapDifficulty` footprint grows to 2981 and 3052
+- whether `contamination.py` still labels them `withheld_map_ref` /
+  `dangling_map_ref`. When the `Map` rows arrive, those hits should
+  disappear. If they do not, the rule has another hole.
 
 ---
 
@@ -1222,6 +1382,17 @@ regions but `cn` can lag or diverge.
   delta. Always key on the column literally named `ID`, fall back to column 0
   only when absent, and state which key was used in the output. This applies
   to `diff_builds.py` as much as to `diff_hotfixes.py`.
+
+  **A newly generated layout may have no column named `ID` at all.** WoWDBDefs
+  names every column of a fresh layout `Field_<build>_NNN` and marks the ID
+  with a `$id$` annotation instead. `UiModelSceneActor` at 1.60.1.70009 is
+  the case: layout `B777EC3A`, ID column `Field_1_60_1_70009_002`. Keying on
+  column 0 there collapsed 1,007 rows onto 128 unique `ScriptTag` strings.
+  The diff reported "126 → 128 rows, +2" against a real 1,006 → 1,007, +1.
+  `key_index(header, table)` now tries three things in order: a column named
+  `ID`, then the DBD's `$id$` column, then column 0. `diff_builds.py` keys
+  each side on its own header, because the two sides of a schema change can
+  name the ID column differently. Pass the table name at every call site.
 - **Never field-compare across a schema change.** Two **independent** signals
   govern whether a positional comparison is valid, and they move separately:
 
@@ -1251,6 +1422,14 @@ regions but `cn` can lag or diverge.
   caught only because the test fixture included a schema change with no row
   changes. Report the change in the summary, in a dedicated section, and in the
   table's own section, stating which comparisons were suppressed and why.
+
+  **A layout change with byte-identical data is still a schema change.**
+  `diff_table()` used to skip identical CSVs before it looked at the
+  layouthash. So `SpellDispelType` at 1.60.1.70009 never reached the schema
+  section: layout `47AA7AEB` → `3B574D4B` (retail 12.1.5's layout, `Mask`
+  u8 → u16), all 11 rows identical. The layouthash is now checked first. A
+  table like that is reported as "data byte-identical (storage-only change)",
+  with nothing suppressed.
 
   `diff_hotfixes.py` does **not** have this guard. It compares two exports of
   the same build, so the schema is normally identical on both sides — but if
@@ -1343,7 +1522,10 @@ python scripts/render_patchnotes.py --build $B --since <YYYYMMDD>
   push times.
 - Re-run `diff_hotfixes.py`, `inventory.py` and `build_db.py` afterwards — the
   cumulative report, manifest and database all describe the old overlay until
-  you do. `inventory.py` will print its "file set did not change" banner; on a
+  you do. (A re-extract used to **erase** `manifest.json`'s inventory section:
+  `write_manifest()` rewrote the whole file. That is how 69913 and 69977 lost
+  theirs. It now carries forward keys it does not own. `inventory.py` also
+  recomputes a missing baseline from `files.csv`.) `inventory.py` will print its "file set did not change" banner; on a
   hotfix-only day that is the correct result, not a failure.
 - **`build_db.py` cannot replace `wow.db` while `mcp_server.py` is running.**
   Windows holds the file open even for a read-only connection, `os.replace`

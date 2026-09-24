@@ -157,6 +157,16 @@ Steps 1–2 are manual and yours:
 
 1. Let Battle.net finish patching, then **launch the game client once** so the
    local CASC index is complete. Skipping this yields partial extractions.
+   **Log in with a character, not just to the launcher.** Hotfixes live in
+   the client's `Cache/ADB/enUS/DBCache.bin`. WTL matches it to a build by
+   the build ID inside the file, so until the client has run on the new
+   build, there is no hotfix overlay for it:
+   - `db2/` and `db2_hotfixed/` come out identical.
+   - The hotfix report is empty by construction.
+   - `check_findings.py` verdicts that compare client against live data are
+     meaningless.
+
+   1.60.1.70009 was extracted in exactly that state; see its patch-day report.
 2. Close WoW and idle Battle.net.
 
 Then one command runs steps 3–10:
@@ -198,8 +208,17 @@ extracting DBCs in the WTL UI — and it pauses and waits at each.
    python scripts/extract_gametables.py   # tab-separated scaling curves
    python scripts/build_db.py             # fold the CSVs into out/<build>/wow.db
    ```
-   `extract_db2.py` is resumable — interrupt and re-run to continue. A **drop**
-   in the encrypted-file count means keys leaked or content unlocked.
+   `extract_db2.py` is resumable — interrupt and re-run to continue.
+
+   The encrypted-file count moves in two directions:
+   - **Down** means keys leaked or content unlocked.
+   - **Up** means new locked content shipped. 70009 went +13: seven new
+     files, and six DB2s (`Mount`, `Vehicle`, `GlobalStrings`…) gained
+     sections under an unknown key.
+
+   `inventory.py` compares each status against the previous build. It reads
+   that build's `manifest.json`, or its `files.csv` if the manifest has no
+   inventory section.
 9. Diff. Client changes and live changes are separate questions:
    ```powershell
    python scripts/diff_builds.py 1.60.1.69893 1.60.1.69913   # what the patch changed
@@ -360,9 +379,61 @@ Each table in `manifest.json` resolves to one of `ok`, `empty`,
 `hotfix_delta` flag computed from a content hash — not a row count, since a
 hotfix can change a value without changing the number of rows.
 
+`manifest.json` is shared. `extract_db2.py` owns the table records, and
+`inventory.py` merges an `inventory` section (file counts, encrypted counts
+by status, the FDID-set hash). A re-extract carries forward sections it does
+not own. It used to overwrite the whole file, which silently cost 69913 and
+69977 their encryption baselines.
+
 A value that moves only in `db2_hotfixed/` was hotfixed; one that moves in both
 shipped in the build. Collapsing the two into a single output loses that
 distinction permanently, so do not "simplify" it away.
+
+---
+
+## Reading a build diff
+
+`reports/<from>_to_<to>.md` has a fixed shape: summary, encryption, files,
+GameTables, schema changes, retail contamination, then per-table detail. Four
+things in it are easy to misread:
+
+- **Retyped and renamed files are usually not client changes.** They come
+  from the community listfile update between the two runs: a file gains or
+  loses a name. Only *added* and *removed* FDIDs are build content.
+- **Schema changes are listed even when nothing else moved.**
+  - A layouthash change with byte-identical data (a column widened, say) shows
+    as "storage-only".
+  - A layout that adds or moves columns suppresses field-level diffs for that
+    table, because a positional comparison would report every field as changed.
+- **Rows are keyed on the ID column, never column 0.** When a fresh layout has
+  no column named `ID` (WoWDBDefs names new columns `Field_<build>_NNN`), the
+  key comes from the DBD's `$id$` annotation. The table section says which
+  column was used.
+- **Retail contamination is split into *Appearing* and *Leaving*.**
+  - *Leaving* is contamination being removed, which is good news.
+  - *Appearing* is where to look. A `dangling_map_ref` there (a row pointing at
+    a map the build lacks) is a lead, not a verdict. Since 70009, Blizzard
+    also withholds `Map` rows for unreleased Forever dungeons, which look the
+    same.
+  - `withheld_map_ref` marks the case where the map already has other data
+    in the build (`MapDifficulty` rows).
+  - "NOT SCANNED" means no rule could read the changed tables. It is not a
+    clean result.
+
+---
+
+## Build history
+
+| Build | Date | What the client diff showed |
+|---|---|---|
+| 1.60.1.69876 | 2026-09-16 | first Forever build on the CDN |
+| 1.60.1.69893 | 2026-09-16 | 1 table (`Cfg_SuperDistrict`) |
+| 1.60.1.69913 | 2026-09-18 | 2 tables (`Cfg_GameRules`, `Cfg_SuperDistrict`). Most of what was new that week arrived as hotfixes |
+| 1.60.1.69977 | 2026-09-23 | 2 tables: 8 new game rules, raid-reset anchors moved |
+| 1.60.1.70009 | 2026-09-24 | **first content build**. 155 tables with content changes, plus 1 storage-only layout change; file set and encryption moved; raid-reset change reverted |
+
+The config hashes for every build are in `builds.json`. The per-build reports
+are regenerated locally and not committed.
 
 ---
 
@@ -424,8 +495,8 @@ Blizzard rotates a build off the version list, its config hashes are gone.
 | `query.py` | Read-only SQL against `wow.db`, formatted for reading |
 | `mcp_server.py` | The same database over MCP stdio (needs `requirements.txt`) |
 | `enrich.py` | Resolve IDs to names, enums and flags; imported by the reporters |
-| `contamination.py` | Detect retail-era data that leaked into a Classic+ build |
-| `diff_builds.py` | Compare two builds' shipped DB2s, emit markdown |
+| `contamination.py` | Detect retail-era data that leaked into a Classic+ build; splits findings into *appearing* and *leaving* |
+| `diff_builds.py` | Compare two builds' shipped DB2s, emit markdown; flags schema and layout changes |
 | `diff_hotfixes.py` | Compare `db2/` against `db2_hotfixed/` within one build |
 | `render_patchnotes.py` | Render either diff as standalone HTML patch notes |
 | `check_findings.py` | Re-test the predictions recorded in `CLAUDE.md` against a build |

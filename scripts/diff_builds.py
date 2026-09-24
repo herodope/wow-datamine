@@ -86,8 +86,16 @@ def diff_table(table, old_dir, new_dir, max_field_rows, lh_old=None, lh_new=None
     """Compare one table across builds. Returns None if byte-identical."""
     old_path, new_path = old_dir / f"{table}.csv", new_dir / f"{table}.csv"
     h_old, h_new = file_hash(old_path), file_hash(new_path)
+    layout_changed = bool(lh_old and lh_new and lh_old != lh_new)
 
-    if h_old is not None and h_old == h_new:
+    # Byte-identical CSVs are skipped unparsed -- unless the layouthash moved.
+    # Checking the hash first used to hide that: SpellDispelType changed layout
+    # 47AA7AEB -> 3B574D4B at 1.60.1.70009 (retail 12.1.5's layout, Mask
+    # u8 -> u16) with all 11 rows identical, and never reached the schema
+    # section. Identical data means nothing is wrong, but the layout change is
+    # still news and belongs in the report.
+    data_identical = h_old is not None and h_old == h_new
+    if data_identical and not layout_changed:
         return None  # unchanged; skip the parse entirely
 
     header_old, rows_old = load_csv(old_path)
@@ -101,9 +109,16 @@ def diff_table(table, old_dir, new_dir, max_field_rows, lh_old=None, lh_new=None
     elif header_old is None and header_new is None:
         return None
 
-    idx, key_col = key_index(header_new or header_old)
-    old = key_rows(rows_old, idx, f"{table}.csv ({old_dir.parent.name})") if header_old else {}
-    new = key_rows(rows_new, idx, f"{table}.csv ({new_dir.parent.name})") if header_new else {}
+    # Key each side on its own header. Across a schema change the ID column
+    # can be named differently on the two sides -- UiModelSceneActor is `ID`
+    # at 69977 and `Field_1_60_1_70009_002` (`$id$` in the DBD) at 70009.
+    idx_old, key_old = key_index(header_old, table) if header_old else (None, None)
+    idx_new, key_new = key_index(header_new, table) if header_new else (None, None)
+    key_col = key_new or key_old
+    if key_old and key_new and key_old != key_new:
+        key_col = f"{key_old} → {key_new}"
+    old = key_rows(rows_old, idx_old, f"{table}.csv ({old_dir.parent.name})") if header_old else {}
+    new = key_rows(rows_new, idx_new, f"{table}.csv ({new_dir.parent.name})") if header_new else {}
 
     def sort_key(k):
         return (0, int(k), "") if k.lstrip("-").isdigit() else (1, 0, k)
@@ -119,7 +134,6 @@ def diff_table(table, old_dir, new_dir, max_field_rows, lh_old=None, lh_new=None
     #   CSV header differs  -> the WoWDBDefs definition changed
     # A definition update can rename or add columns with no layouthash change
     # (unk_<offset> becoming a real name), so the header check is not redundant.
-    layout_changed = bool(lh_old and lh_new and lh_old != lh_new)
     header_changed = header_old is not None and header_new is not None and header_old != header_new
     column_count_changed = (
         header_old is not None and header_new is not None and len(header_old) != len(header_new)
@@ -136,6 +150,8 @@ def diff_table(table, old_dir, new_dir, max_field_rows, lh_old=None, lh_new=None
             f"{len(renamed)} column(s) renamed in the definition"
             + (f" (e.g. {renamed[0][0]} → {renamed[0][1]})" if renamed else "")
         )
+    if data_identical:
+        reasons.append("data byte-identical (storage-only change)")
 
     fields_comparable = not layout_changed and not header_changed
     # Positional row equality is only meaningful when the columns line up. A
@@ -167,6 +183,7 @@ def diff_table(table, old_dir, new_dir, max_field_rows, lh_old=None, lh_new=None
         "layout_changed": layout_changed,
         "header_changed": header_changed,
         "schema_changed": layout_changed or header_changed,
+        "data_identical": data_identical,
         "schema_reasons": reasons,
         "fields_comparable": fields_comparable,
         "rows_comparable": rows_comparable,
@@ -421,6 +438,7 @@ def render_schema_changes(results):
         ]
         return L
 
+    identical = [r for r in hits if r.get("data_identical")]
     L.append(
         f"⚠️ **{len(hits)} table(s) changed schema between these builds, and "
         "field-level comparison is suppressed for them.** When columns move, a "
@@ -428,6 +446,14 @@ def render_schema_changes(results):
         "— noise, not signal. Row-level added/removed is still reported where it "
         "stays meaningful."
     )
+    if identical:
+        L.append("")
+        L.append(
+            f"{len(identical)} of them changed layout with **byte-identical exported "
+            "data** — a storage change (e.g. a column widened) with no content "
+            "change. Nothing is suppressed for those; they are listed because the "
+            "layout move itself is news."
+        )
     L.append("")
     L.append("| Table | Reason | Field diffs | Changed rows | Columns |")
     L.append("|---|---|---|---|---|")
@@ -436,10 +462,14 @@ def render_schema_changes(results):
             x for x in (_col_summary(r.get("columns_added"), "+"),
                         _col_summary(r.get("columns_removed"), "−")) if x
         )
-        changed_cell = "suppressed" if not r["rows_comparable"] else f"{len(r['changed']):,}"
+        if r.get("data_identical"):
+            field_cell, changed_cell = "n/a — identical", "0"
+        else:
+            field_cell = "ok" if r["fields_comparable"] else "suppressed"
+            changed_cell = "suppressed" if not r["rows_comparable"] else f"{len(r['changed']):,}"
         L.append(
             f"| `{r['table']}` | {'; '.join(r['schema_reasons']) or 'schema differs'} | "
-            f"{'ok' if r['fields_comparable'] else 'suppressed'} | {changed_cell} | "
+            f"{field_cell} | {changed_cell} | "
             f"{cols or '—'} |"
         )
     L += ["", "---", ""]
@@ -568,9 +598,9 @@ def render(old_build, new_build, results, findings, fd, unchanged_count, max_row
         )
     L.append("")
     L.append(
-        f"⭐ = high-signal table, detailed below. ⚠️ = schema changed, "
-        f"field diffs suppressed. {unchanged_count:,} table(s) were byte-identical "
-        f"and are omitted."
+        f"⭐ = high-signal table, detailed below. ⚠️ = schema changed (field diffs "
+        f"suppressed unless the data is byte-identical). {unchanged_count:,} table(s) "
+        f"were byte-identical with an unchanged layout and are omitted."
     )
     L.append("")
     L.append("---")
@@ -654,7 +684,11 @@ def main(argv=None):
             unchanged += 1
             continue
         results.append(r)
-        flag = " [SCHEMA CHANGED - field diffs suppressed]" if r["schema_changed"] else ""
+        flag = ""
+        if r.get("data_identical"):
+            flag = " [LAYOUT CHANGED - data byte-identical]"
+        elif r["schema_changed"]:
+            flag = " [SCHEMA CHANGED - field diffs suppressed]"
         log(f"  {t}: +{len(r['added'])} -{len(r['removed'])} ~{len(r['changed'])}{flag}")
 
     log(f"  {len(results)} changed, {unchanged} unchanged")
@@ -665,7 +699,7 @@ def main(argv=None):
             for d in (new_dir, old_dir):
                 header, rows = load_csv(d / f"{name}.csv")
                 if header is not None:
-                    idx, _ = key_index(header)
+                    idx, _ = key_index(header, name)
                     return header, {r[idx]: r for r in rows if idx < len(r)}
             return None, {}
 

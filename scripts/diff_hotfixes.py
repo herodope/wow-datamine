@@ -103,18 +103,57 @@ def status_label(status):
 # --- CSV loading ------------------------------------------------------------
 
 
-def key_index(header):
+_DBD_ID_COLUMNS = {}
+
+
+def dbd_id_columns(table):
+    """Column names the table's DBD marks `$id$` in any layout, or an empty set.
+
+    A freshly generated layout names nothing, so its ID column is not called
+    `ID`. Measured on 1.60.1.70009: UiModelSceneActor's new layout B777EC3A
+    names every column Field_1_60_1_70009_NNN and marks
+    `$id$Field_1_60_1_70009_002`. Without this, key_index() fell back to column
+    0 (ScriptTag), collapsed 1,007 rows onto 128 unique strings, and the build
+    diff reported "126 -> 128 rows, +2" against a real 1,006 -> 1,007, +1.
+    """
+    if not table:
+        return set()
+    if table not in _DBD_ID_COLUMNS:
+        import re
+        import config
+        names = set()
+        path = config.DEFINITIONS_DIR / f"{table}.dbd"
+        try:
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+                m = re.match(r"^\$([^$]*)\$([A-Za-z0-9_]+)", line.strip())
+                if m and "id" in [a.strip() for a in m.group(1).split(",")]:
+                    names.add(m.group(2))
+        except OSError:
+            pass
+        _DBD_ID_COLUMNS[table] = names
+    return _DBD_ID_COLUMNS[table]
+
+
+def key_index(header, table=None):
     """Index of the ID column.
 
     DBCD emits columns in DBD definition order, and the ID column is NOT always
     first -- Achievement puts Description_lang first and ID at index 3. Keying
     on column 0 silently collapses rows that share that value (114 of
     Achievement's 233), which makes a diff quietly wrong rather than noisy.
+
+    Order: a column literally named `ID`; then, when `table` is given, the
+    column its DBD annotates `$id$` (unnamed layouts); column 0 only as a last
+    resort. The returned name says which was used.
     """
     if not header:
         return 0, None
     for i, name in enumerate(header):
         if name.strip().lower() == "id":
+            return i, name
+    ids = dbd_id_columns(table)
+    for i, name in enumerate(header):
+        if name in ids:
             return i, name
     return 0, header[0]
 
@@ -158,7 +197,7 @@ def diff_table(table, plain_dir, hotfixed_dir):
     h_plain, plain_rows = load_csv(plain_dir / (table + ".csv"))
     h_hot, hot_rows = load_csv(hotfixed_dir / (table + ".csv"))
 
-    idx, key_col = key_index(h_hot or h_plain)
+    idx, key_col = key_index(h_hot or h_plain, table)
     plain = key_rows(plain_rows, idx, f"{table}.csv (plain)")
     hot = key_rows(hot_rows, idx, f"{table}.csv (hotfixed)")
 
@@ -468,7 +507,7 @@ def main(argv=None):
         for d in (hotfixed_dir, plain_dir):
             header, rows = load_csv(d / (name + ".csv"))
             if header is not None:
-                idx, _ = key_index(header)
+                idx, _ = key_index(header, name)
                 return header, {r[idx]: r for r in rows if idx < len(r)}
         return None, {}
 

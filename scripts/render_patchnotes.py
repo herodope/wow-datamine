@@ -470,7 +470,7 @@ def items_provenance(results, client_db2):
     header, rows = load_csv(client_db2 / "Item.csv")
     if header is None:
         return None
-    idx, _col = key_index(header)
+    idx, _col = key_index(header, "Item")
     shipped = set(key_rows(rows, idx, "Item.csv (client)"))
 
     with_base = sum(1 for k in res["added"] if k in shipped)
@@ -739,10 +739,13 @@ def render_contamination(c):
              f"<p>Rules that ran: "
              + ", ".join(f"<code>{esc(r)}</code>" for r in cov["rules_applicable"])
              + ".</p></div>")
-    L.append("<table><thead><tr><th>Confidence</th><th>Rule</th><th>Table</th>"
+    # "leaving" = removed rows / replaced values: contamination being cleaned
+    # out, a fix rather than a new finding. See contamination.py.
+    L.append("<table><thead><tr><th>Side</th><th>Confidence</th><th>Rule</th><th>Table</th>"
              "<th>Record</th><th>Detail</th></tr></thead><tbody>")
     for f in findings:
-        L.append(f"<tr><td>{esc(f['confidence'].upper())}</td>"
+        side = "leaving" if f.get("side") == "removed" else "appearing"
+        L.append(f"<tr><td>{side}</td><td>{esc(f['confidence'].upper())}</td>"
                  f"<td class='mono'>{esc(f['rule'])}</td>"
                  f"<td class='mono'>{esc(f['table'])}</td>"
                  f"<td class='mono'>{esc(f['record'])}</td>"

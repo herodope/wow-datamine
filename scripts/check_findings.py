@@ -146,7 +146,7 @@ class Build:
         header, rows = load_csv(path)
         if header is None:
             return None, {}
-        idx, _ = key_index(header)
+        idx, _ = key_index(header, name)
         return header, {r[idx]: r for r in rows if idx < len(r)}
 
     def col(self, header, name):

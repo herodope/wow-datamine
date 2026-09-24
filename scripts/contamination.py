@@ -8,9 +8,25 @@ new one appearing is a signal in itself.
 Rules are ranked by how much they actually discriminate, measured against
 1.60.1.69913:
 
-  dangling_map_ref   HIGH   -- a row references a Map ID absent from this
-                              build. Exactly 1 of 233 Achievement rows hits
-                              this, so it is near zero false positives.
+  dangling_map_ref   MEDIUM -- an ADDED row references a Map ID absent from
+                              this build. Was HIGH, on the 69913 measurement
+                              (exactly 1 of 233 Achievement rows, the WoD
+                              Warlord Zaela statistic). 1.60.1.70009 broke it:
+                              8 added Achievement rows hit it, and at least the
+                              Shaper's Terrace / Alcaz Prison / Hyjal Summit /
+                              Barrow Deeps boss statistics are unreleased
+                              FOREVER dungeons whose Map rows are withheld, not
+                              retail leftovers. An absent map now means either.
+  withheld_map_ref   LOW    -- the same, but the absent map already has other
+                              data in this build (MapDifficulty rows): the map
+                              exists and only its definition is withheld.
+                              Maps 2994 and 3001 at 70009. Reported so it can
+                              be watched, not as contamination.
+
+  REMOVED rows and replaced values are contamination LEAVING the build (the
+  Zaela achievement at 70009, LightParams 453). They are rendered in their own
+  section: a fix, not a new finding. Mixing them into one table with added
+  rows was the other half of the 70009 problem.
   light_absent_map   HIGH   -- a LightParams ID whose only referencing Light
                               rows sit on maps absent from this build.
   orphan_removal     MEDIUM -- rows removed together that carry no supporting
@@ -70,7 +86,7 @@ csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 # deliberately excluded.
 MAP_REF_COLUMNS = {"instance_id", "instanceid", "continentid", "mapid", "map_id"}
 
-HIGH, MEDIUM = "high", "medium"
+HIGH, MEDIUM, LOW = "high", "medium", "low"
 
 
 def _rows(result, side):
@@ -151,7 +167,8 @@ def inbound_references(entity_table, row_ids, load_table, relations,
 
 def build_reference(load_table):
     """Collect what the rules need. `load_table(name)` -> (header, {key: row})."""
-    ref = {"map_ids": set(), "items_with_data": set(), "light_by_param": {}, "map_names": {}}
+    ref = {"map_ids": set(), "items_with_data": set(), "light_by_param": {}, "map_names": {},
+           "map_footprint": {}}
 
     mh, maps = load_table("Map")
     if mh:
@@ -159,6 +176,16 @@ def build_reference(load_table):
         ni = _col(mh, "MapName_lang")
         if ni is not None:
             ref["map_names"] = {k: v[ni] for k, v in maps.items() if ni < len(v)}
+
+    # MapDifficulty rows for a map ID with no Map row: the map exists in this
+    # build's data and only its definition is withheld. Measured at 70009:
+    # maps 2994 (Alcaz Prison) and 3001 (Shaper's Terrace) have two rows each.
+    dh, diffs = load_table("MapDifficulty")
+    di = _col(dh, "MapID")
+    if dh and di is not None:
+        for row in diffs.values():
+            if di < len(row) and row[di] not in ("", "0"):
+                ref["map_footprint"][row[di]] = ref["map_footprint"].get(row[di], 0) + 1
 
     for t in ("ItemSparse", "ItemSearchName"):
         _h, rows = load_table(t)
@@ -200,12 +227,28 @@ def _dangling_map_refs(result, ref, rows_by_key, which):
             val = row[i]
             if val in ("", "0", "-1") or val in ref["map_ids"]:
                 continue
+            footprint = ref["map_footprint"].get(val, 0)
+            if which == "removed":
+                # Leaving the build: a fix. Confidence stays HIGH because the
+                # row being pulled is itself the evidence it did not belong.
+                rule, conf = "dangling_map_ref", HIGH
+                detail = f"{name} = {val}, a map not present in this build; row removed"
+            elif footprint:
+                rule, conf = "withheld_map_ref", LOW
+                detail = (f"{name} = {val}: no Map row, but {footprint} MapDifficulty "
+                          f"row(s) reference it -- map definition withheld, likely "
+                          f"unreleased content rather than retail")
+            else:
+                rule, conf = "dangling_map_ref", MEDIUM
+                detail = (f"{name} = {val}, a map not present in this build "
+                          f"(retail leftover OR withheld Forever map -- the rule "
+                          f"cannot tell; see 1.60.1.70009)")
             findings.append({
-                "rule": "dangling_map_ref",
-                "confidence": HIGH,
+                "rule": rule,
+                "confidence": conf,
                 "table": result["table"],
                 "record": key,
-                "detail": f"{name} = {val}, a map not present in this build",
+                "detail": detail,
                 "side": which,
             })
     return findings
@@ -241,7 +284,9 @@ def _light_absent_map(result, ref):
                             f"{', '.join(lid for lid, _ in absent)} on map(s) "
                             f"{', '.join(sorted({c for _, c in absent}))} absent from this build"
                         ),
-                        "side": "changed",
+                        # "replaced" = the value is leaving this Light row: a
+                        # fix, like LightParams 453 on 69913 and 495 on 70009.
+                        "side": "removed" if role == "replaced" else "added",
                     })
     return findings
 
@@ -382,7 +427,7 @@ def scan(results, load_table):
         "per_table": per_table,
     }
 
-    order = {HIGH: 0, MEDIUM: 1}
+    order = {HIGH: 0, MEDIUM: 1, LOW: 2}
     findings.sort(key=lambda f: (order.get(f["confidence"], 9), f["table"], str(f["record"])))
     return findings, ref, coverage
 
@@ -479,12 +524,41 @@ def render_markdown(findings, coverage=None):
         "turn up and get pruned over time — a **new** one appearing is itself a signal."
     )
     L.append("")
-    L.append("| Confidence | Rule | Table | Record | Detail |")
-    L.append("|---|---|---|---|---|")
-    for f in findings:
+
+    appearing = [f for f in findings if f.get("side") != "removed"]
+    leaving = [f for f in findings if f.get("side") == "removed"]
+
+    def table(rows):
+        out = ["| Confidence | Rule | Table | Record | Detail |", "|---|---|---|---|---|"]
+        for f in rows:
+            out.append(
+                f"| {f['confidence'].upper()} | `{f['rule']}` | `{f['table']}` | "
+                f"`{f['record']}` | {f['detail']} |"
+            )
+        return out
+
+    L.append(f"### Appearing ({len(appearing)})")
+    L.append("")
+    if appearing:
         L.append(
-            f"| {f['confidence'].upper()} | `{f['rule']}` | `{f['table']}` | "
-            f"`{f['record']}` | {f['detail']} |"
+            "Added or newly referenced. `dangling_map_ref` is MEDIUM, not HIGH: at "
+            "1.60.1.70009 it fired on unreleased Forever dungeons whose `Map` rows "
+            "are withheld, so an absent map is no longer proof of a retail leftover. "
+            "`withheld_map_ref` means the map already has `MapDifficulty` rows here."
         )
+        L.append("")
+        L += table(appearing)
+    else:
+        L.append("None.")
+    L.append("")
+    L.append(f"### Leaving ({len(leaving)})")
+    L.append("")
+    if leaving:
+        L.append("Removed rows and replaced values: contamination being cleaned **out**. "
+                 "A fix, not a new finding.")
+        L.append("")
+        L += table(leaving)
+    else:
+        L.append("None.")
     L += ["", "---", ""]
     return L

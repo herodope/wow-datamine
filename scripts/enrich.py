@@ -330,7 +330,7 @@ class Enricher:
         if header is None:
             self._tables[key] = (None, {})
             return self._tables[key]
-        idx, _col = key_index(header)
+        idx, _col = key_index(header, name)
         self._tables[key] = (header, key_rows(rows, idx, f"{name}.csv ({variant})"))
         return self._tables[key]
 

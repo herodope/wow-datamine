@@ -309,6 +309,21 @@ def write_manifest(path, build, records, started, wtl_build):
         "tables": {k: records[k] for k in sorted(records)},
     }
 
+    # Other scripts merge their own sections into this file -- inventory.py
+    # writes "inventory". Rewriting the whole dict used to drop them: every
+    # re-extract (the hotfix-only-day procedure prescribes one) erased the
+    # inventory section, so 69913 and 69977 lost theirs, and 70009's
+    # encrypted-count comparison ran with no baseline on the first build whose
+    # file set actually moved. Carry forward any key this script does not own.
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            existing = {}
+        for key, value in existing.items():
+            if key not in manifest:
+                manifest[key] = value
+
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".manifest.", suffix=".json")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:

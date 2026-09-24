@@ -254,15 +254,43 @@ def previous_build(build):
 
 
 def baseline_from(build):
-    """(encrypted, by_status, fdids_sha) from a build's manifest, or Nones."""
+    """(encrypted, by_status, fdids_sha) from a build's manifest, or Nones.
+
+    Falls back to counting the `encrypted` column of that build's files.csv
+    when the manifest has no inventory section. The manifest is a cache of
+    what files.csv already says; losing it must not lose the baseline. That
+    happened: extract_db2.py used to rewrite manifest.json wholesale, so 69913
+    and 69977 have no inventory section, and 70009 -- the first build whose
+    file set moved -- reported "no previous build to compare against" for the
+    encrypted count while comparing the file set against 69977 on the next
+    line. fdids_sha stays None here; main() already recomputes it from the CSV.
+    """
     if not build:
         return None, None, None
     path = config.build_out_dir(build) / "manifest.json"
     try:
         inv = json.loads(path.read_text(encoding="utf-8")).get("inventory", {})
     except (OSError, json.JSONDecodeError):
-        return None, None, None
-    return inv.get("encrypted"), inv.get("encrypted_by_status"), inv.get("fdid_set_sha")
+        inv = {}
+    if inv.get("encrypted") is not None:
+        return inv.get("encrypted"), inv.get("encrypted_by_status"), inv.get("fdid_set_sha")
+
+    prev_csv = config.build_out_dir(build) / "files.csv"
+    if not prev_csv.exists():
+        return None, None, inv.get("fdid_set_sha")
+    by_status = {}
+    with open(prev_csv, "r", encoding="utf-8", errors="replace", newline="") as fh:
+        reader = csv.reader(fh)
+        header = next(reader, None) or []
+        try:
+            enc_i = header.index("encrypted")
+        except ValueError:
+            return None, None, inv.get("fdid_set_sha")
+        for row in reader:
+            if enc_i < len(row) and row[enc_i]:
+                by_status[row[enc_i]] = by_status.get(row[enc_i], 0) + 1
+    log(f"  baseline for {build} recomputed from files.csv (manifest has no inventory section)")
+    return sum(by_status.values()), by_status, inv.get("fdid_set_sha")
 
 
 def fdid_set_sha(csv_path):
