@@ -470,13 +470,14 @@ reimplementing the check.
 builds.json    manifest index, keyed by buildId — the unrecoverable bit
 scripts/       the pipeline
 docs/          WTL API reference
+questxp/       quest XP sweep: the in-game addon, cache parser and notes
 CLAUDE.md      project context and locked decisions (agent-facing)
 README.md      this file
 ```
 
 `out/` (extracted client data), `reports/` (generated diff output), `vendor/`
-(third-party clones) and `questxp/` (the quest XP sweep addon and its
-captures) are gitignored. All are reproducible; `builds.json` is not — once
+(third-party clones) and the quest XP sweep's captures (`questxp/cache/`,
+`questxp/out/`) are gitignored. The questxp code itself is committed. All are reproducible; `builds.json` is not — once
 Blizzard rotates a build off the version list, its config hashes are gone.
 
 ### Scripts
