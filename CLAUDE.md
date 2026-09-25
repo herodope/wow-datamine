@@ -26,9 +26,12 @@ Outstanding:
       moves the file set (+240 / −401), and moves encryption (+13). See
       `reports/patchday_1.60.1.70009.md`. It was extracted **before the client
       was launched on it**, so its hotfix overlay is unmeasured.
-- [ ] **Measure 70009's hotfix overlay.** Log in once, log out, snapshot
-      `db2_hotfixed/`, `GET /dbc/reloadHotfixes`, re-extract with
-      `--restart`. Findings #1, #3 and #8 stay unmeasured on 70009 until then.
+- [x] **70009's hotfix overlay was measured on 2026-09-24**, from a
+      `DBCache.bin` with a build-70009 header written at 21:12. That is a
+      lower bound: the client was running again during the extract, and its
+      `.tmp` session buffer is never read. The overlay has 11 tables and
+      only **2 real pushes**. See **Hotfixes are per build** under **Key
+      facts**.
 
 ---
 
@@ -530,15 +533,20 @@ confirm it, and what would falsify it. **Resolve these before adding new ones**
 
 > **Checked against 1.60.1.70009 on 2026-09-24**, from the client data only:
 > the client had not been launched on 70009, so there was no hotfix overlay.
-> Resolved: #2 (shipped) and #6 (first real test). Partly resolved: #5.
-> Unchanged: #4 and #7. Unmeasured without an overlay: #1, #3 and #8.
+> Resolved: #2 (shipped) and #6 (first real test). Partly resolved: #5 in
+> the client. Unchanged: #4 and #7.
 >
-> **`check_findings.py` misreads a build with no overlay.** When the overlay
-> is missing, the live data *is* the client data. It then reported #3 as
-> RESOLVED ("ships in the client") when the client still held the same 5 items.
-> It also reported #2 as "still live-only" when the rename had shipped. Both
-> are the same mistake as 69977's first run. Before trusting a verdict, check
-> that the manifest's `hotfix_delta` count is non-zero.
+> The 70009 overlay was measured later the same day. Results: #1 is gone
+> from live data, #3 is still staged (481 live-only), #5 regressed live, and
+> #8 gained supporting evidence.
+>
+> **`check_findings.py` used to misread a build with no overlay** (fixed
+> 2026-09-24). With no overlay, the live data *is* the client data, and it
+> reported #3 as RESOLVED while the client held the same 5 items. Separately,
+> #2 could never resolve: it compared the count of "refresh the world"
+> strings (1) against the number of renamed IDs (3). It now reads the
+> overlay's presence from the manifest, reports **UNMEASURED** for live-side
+> checks when there is none, and checks #2 per ID against the client text.
 >
 > The parser reads these entries by regex. The first backticked `Field_…`
 > name, `Achievement` ID and `LightParams` ID in this section must stay the
@@ -563,8 +571,15 @@ cadence), and whether the table ships populated in the client rather than
 arriving by hotfix. A shifted date means the schedule slipped; a fourth row
 means the cadence is ongoing rather than a three-week run.
 
-**70009:** still empty (204) in the client, so the schedule does not ship
-in the build. The live rows are unmeasured because there was no overlay.
+**70009:** still empty (204) in the client, and **absent from the live
+overlay too**. The 70009 overlay has no `TimeEventData` rows, and push 112079
+is not among its two real pushes. `check_findings.py` reports FALSIFIED.
+Read that as "not live on this build", not "cancelled". Hotfixes do not
+carry across builds (see **Key facts**), so the rows may be re-pushed for
+70009 later. The first date, 12 October, is still in the future.
+
+**Watch:** whether a later 70009 wave re-pushes the three rows, and with the
+same timestamps.
 
 ### 2. A shard/world mechanic being repositioned — RESOLVED at 70009 (shipped)
 
@@ -613,10 +628,13 @@ again means it is still being staged. Also watch whether the ladder grows —
 the vanilla honor system has 14 ranks per faction, so an incomplete set now
 implies more to come.
 
-**70009: not shipped.** The client still holds **5** modern-ID rank-titled
-items, the same as 69977. Whether the other 481 still arrive live is
-unmeasured, because there was no overlay. `check_findings.py` reported this
-as RESOLVED; that verdict is the no-overlay artifact described above.
+**70009: not shipped, still staged.** The client still holds **5**
+modern-ID rank-titled items, the same as 69977. With the overlay measured,
+**481** are live-only, exactly the recorded count. The bulk injection was
+carried over to the new build unchanged: 4,209 `ItemSparse` rows are
+identical to 69977's live values. (Before the overlay was loaded,
+`check_findings.py` called this RESOLVED. That verdict was the no-overlay
+artifact, since fixed.)
 
 ### 4. LightData column 055 — LEANING FALSIFIED, do not assert
 
@@ -694,6 +712,13 @@ case. The 75 stubs are what is left to watch. The same build also pulled
 AreaTable 16870 (map 3049), the Development Land map, and a second
 light case (495, see **Known cases**). The contamination rule itself had to
 change for 70009; see **Retail contamination**.
+
+**Live, the item stubs regressed.** On 69977, 71 of the 75 stubs were
+removed live by push 112078. In the 70009 overlay that removal does **not**
+apply, and all 75 are present live as well as in the client. The fixes that
+matter moved into the client (Zaela, the 453 use). The one that stayed a
+hotfix lapsed with the build. That is the per-build overlay rule under **Key
+facts** at work.
 
 ### 6. The encrypted-count detector — TESTED at 70009, and it moved
 
@@ -935,9 +960,21 @@ record in the window, which argues against a simple unknown-table-hash story.
 - whether the count of "changed rows with no hotfix record" on the wave page
   stays at 6 or grows — `render_patchnotes.py --since` reports it per wave
 
-**70009:** unmeasured, because there was no overlay. The 69977 patch-day
-report has a hypothesis: `BroadcastText` fills in on demand as the client meets
-NPCs, which would explain these six. It is still untested.
+**70009: supporting evidence, not proof.** After one play session on
+70009, the overlay gained **13** `BroadcastText` rows with **no hotfix
+record**. They are ordinary NPC lines:
+- 2545, "It is not yet your time…", a spirit healer.
+- 4857, "What are you looking for?".
+- 8116 and 8122, the Barrens wind-rider master. 8122 is one of this
+  finding's six.
+- Unnamed rows 7214–7265.
+
+The Lorthuna/Belathaan rows from push 112203 (304793–304797) and 327642 are
+absent from the 70009 overlay. That fits the 69977 report's hypothesis: the
+client caches `BroadcastText` on demand as it meets NPCs, and no hotfix
+record is created. The test is still the one proposed there. Talk to a
+specific NPC whose row is absent, log out, re-extract, and check that the
+row appears with no push ID.
 
 ### 9. Four Forever dungeons named, with their `Map` rows withheld (added 2026-09-24)
 
@@ -997,6 +1034,26 @@ content. Nothing ties a specific encrypted section to these maps.
   distinct from the static DB2s shipped in the build: hotfixes are Blizzard
   tuning live data between client patches. Diffing them answers a different
   question than diffing DB2s, and the two must not be conflated.
+- **Hotfixes are per build. A new build starts with an almost empty
+  overlay.** Measured at 70009 against 69977's last overlay:
+  - Only **2** real pushes applied: 112078, and 112238, a new lighting push
+    that adds a `ZoneLight` "Stormwind Harbor".
+  - The bulk item injection carried over unchanged.
+  - Every other 69977 hotfix went one of two ways:
+    - **Promoted into the client.** The Zaela achievement and category
+      removal, the Transfer → Refresh strings, Faction 2758, `Light` 269,
+      6 `ConversationLine`s, 16 `LightData` rows and 5 `ItemSparse` rows
+      now ship in the client.
+    - **Lapsed.** The Apply Poultice rework (112230), `PetPersonality` 1
+      (112226), the `TimeEventData` schedule (112079), and the item-stub
+      removal (112078 on `Item`). Apply Poultice is back to an instant
+      `KILL_CREDIT` cast on 70009.
+
+  So a hotfix vanishing on a new build is **not** a revert decision until a
+  later wave on that build confirms it; it may simply not have been re-pushed
+  yet. And a client change on a new build may already have been live for
+  days. Compare the new client against the **previous overlay** as well as
+  the previous client.
 - **Encryption.** Blizzard withholds Salsa20 keys for unreleased content.
   Encrypted files fail to decode until keys land in `TACTKeys`. Always
   skip-and-log, never error the run.

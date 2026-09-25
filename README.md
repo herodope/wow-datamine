@@ -163,8 +163,8 @@ Steps 1–2 are manual and yours:
    build, there is no hotfix overlay for it:
    - `db2/` and `db2_hotfixed/` come out identical.
    - The hotfix report is empty by construction.
-   - `check_findings.py` verdicts that compare client against live data are
-     meaningless.
+   - `check_findings.py` reports UNMEASURED for any check that needs live
+     data.
 
    1.60.1.70009 was extracted in exactly that state; see its patch-day report.
 2. Close WoW and idle Battle.net.

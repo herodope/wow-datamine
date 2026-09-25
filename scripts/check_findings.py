@@ -9,6 +9,16 @@ against whatever build is on disk and reports:
     FALSIFIED   the data contradicts what was recorded -- the finding is wrong,
                 or the world moved in a way nobody predicted
     UNCHECKABLE the data needed is missing
+    UNMEASURED  the check needs the live hotfix overlay and this build has none
+
+UNMEASURED exists because a missing overlay does not look missing. When the
+client has never run on a build, WTL has no DBCache.bin for it, and
+db2_hotfixed/ comes out byte-identical to db2/. Every "live" value then
+silently equals the client value. At 1.60.1.70009 that made #3 report RESOLVED
+("the ladder now ships in the client") while the client held the same 5 items
+as the build before -- "live-only: 0" only meant "no live data". Overlay
+presence is read from manifest.json: no table with hotfix_delta and none
+hotfix_only means no overlay.
 
 The recorded values are parsed out of CLAUDE.md where they are machine-readable
 (timestamps, record IDs, column names) so the doc stays authoritative and the
@@ -27,6 +37,7 @@ Usage:
 
 import argparse
 import csv
+import json
 import re
 import sys
 from datetime import datetime, timezone
@@ -36,7 +47,8 @@ from diff_hotfixes import key_index, load_csv
 
 csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 
-RESOLVED, UNRESOLVED, FALSIFIED, UNCHECKABLE = "RESOLVED", "UNRESOLVED", "FALSIFIED", "UNCHECKABLE"
+RESOLVED, UNRESOLVED, FALSIFIED, UNCHECKABLE, UNMEASURED = (
+    "RESOLVED", "UNRESOLVED", "FALSIFIED", "UNCHECKABLE", "UNMEASURED")
 
 # Vanilla honour-system rank titles, both factions.
 RANKS = [
@@ -139,6 +151,19 @@ class Build:
         self.out = config.build_out_dir(version)
         self.plain = self.out / "db2"
         self.hotfixed = self.out / "db2_hotfixed"
+        self.has_overlay = self._detect_overlay()
+
+    def _detect_overlay(self):
+        """True / False from manifest.json totals; None if it cannot be read."""
+        try:
+            m = json.loads((self.out / "manifest.json").read_text(encoding="utf-8"))
+            t = m["totals"]
+            return bool(t.get("hotfix_delta") or t.get("hotfix_only"))
+        except (OSError, ValueError, KeyError):
+            return None
+
+    NO_OVERLAY = ("  no hotfix overlay for this build: db2_hotfixed/ equals db2/, "
+                  "so the live side cannot be measured")
 
     def table(self, name, hotfixed=False):
         """(header, {id: row}) or (None, {}) when the table has no CSV."""
@@ -167,7 +192,20 @@ def check_time_events(b, rec):
     h_plain, plain = b.table("TimeEventData")
     h_hot, hot = b.table("TimeEventData", hotfixed=True)
     if h_hot is None:
-        return UNCHECKABLE, ["db2_hotfixed/TimeEventData.csv not found"]
+        # 204-empty tables write no CSV, so "not found" is the normal state of
+        # a hotfix-only table when nothing is live -- not a missing extraction.
+        if h_plain is not None and plain:
+            return RESOLVED, [f"  now SHIPS IN THE CLIENT: db2/TimeEventData.csv has {len(plain)} row(s)"]
+        if b.has_overlay is False:
+            return UNMEASURED, [b.NO_OVERLAY,
+                                "  client: TimeEventData still empty, so the schedule does not ship in the build"]
+        if b.has_overlay:
+            return FALSIFIED, [
+                "  TimeEventData is empty in the client AND in the live overlay",
+                "  the recorded rows are gone: withdrawn, or not (yet) pushed for this build",
+                "  a DBCache.bin captured mid-session is a lower bound; re-check after a full logout",
+            ]
+        return UNCHECKABLE, ["db2_hotfixed/TimeEventData.csv not found and overlay state unknown"]
 
     ev_out, notes = [], []
     ts_i = b.col(h_hot, "Timestamp")
@@ -186,6 +224,9 @@ def check_time_events(b, rec):
     if h_plain is not None and plain:
         notes.insert(0, f"  now SHIPS IN THE CLIENT: db2/TimeEventData.csv has {len(plain)} row(s)")
         return RESOLVED, notes + ["  the schedule is no longer hotfix-only"]
+    if b.has_overlay is False:
+        return UNMEASURED, [b.NO_OVERLAY,
+                            "  client: TimeEventData still empty, so the schedule does not ship in the build"]
 
     notes.insert(0, f"  still hotfix-only; {len(ev_out)} row(s) in db2_hotfixed/")
     if actual_ts == recorded_ts:
@@ -212,7 +253,7 @@ def check_rename(b, rec):
     if t_i is None:
         return UNCHECKABLE, ["TagText_lang column not found"]
 
-    notes, still_renamed = [], 0
+    notes, still_renamed, client_renamed = [], 0, 0
     for sid in ids:
         before = plain.get(sid, [None] * (t_i + 1))[t_i] if plain else None
         after = hot.get(sid, [None] * (t_i + 1))[t_i] if hot else None
@@ -220,6 +261,8 @@ def check_rename(b, rec):
         notes.append(f"           live={after!r}")
         if after and "refresh" in after.lower():
             still_renamed += 1
+        if before and "refresh" in before.lower():
+            client_renamed += 1
 
     def count(rows, needle):
         return sum(1 for r in rows.values() if t_i < len(r) and needle in r[t_i].lower())
@@ -230,8 +273,15 @@ def check_rename(b, rec):
     notes.append(f"  'shard' strings: {shard_client} in client, {shard_live} live")
     notes.append(f"  'refresh the world' strings: {refresh_client} in client, {refresh_live} live")
 
-    if refresh_client >= still_renamed and still_renamed:
-        return RESOLVED, notes + ["  the rename now ships in the client, not just live"]
+    # Per recorded ID, from the CLIENT text. This used to compare the count of
+    # strings containing "refresh the world" (one of the three says it) against
+    # the number of renamed IDs (three), so it could never resolve: at 70009
+    # the rename had shipped in the client and this still said "live-only".
+    if client_renamed == len(ids):
+        return RESOLVED, notes + [f"  all {len(ids)} recorded strings carry the rename in the CLIENT; it shipped"]
+    if b.has_overlay is False:
+        return UNMEASURED, notes + [b.NO_OVERLAY,
+                                    f"  client: {client_renamed} of {len(ids)} recorded strings renamed"]
     if shard_live == 0 and shard_client > 0:
         return RESOLVED, notes + ["  'shard' wording is gone from live data entirely"]
     if still_renamed == 0:
@@ -284,7 +334,14 @@ def check_pvp(b, rec):
     if recorded is not None:
         notes.append(f"  recorded in CLAUDE.md: {recorded:,} arrived by bulk injection")
 
-    if not only_live and in_client:
+    if b.has_overlay is False:
+        # "live-only: 0" here means "no live data", not "nothing is live-only".
+        if recorded is not None and len(in_client) >= recorded:
+            return RESOLVED, notes + ["  the recorded population is in the CLIENT; staging is over"]
+        return UNMEASURED, notes + [b.NO_OVERLAY,
+                                    "  the client alone does not hold the ladder; whether it is still "
+                                    "staged live is unknown"]
+    if not only_live and in_client and (recorded is None or len(in_client) >= recorded):
         return RESOLVED, notes + ["  the ladder now ships in the client; staging is over"]
     if recorded is not None and len(only_live) > recorded:
         return RESOLVED, notes + [
@@ -335,10 +392,32 @@ def check_contamination(b, rec):
 
     lp_id = rec.get("lightparams_id")
     if lp_id:
+        # The finding is its use by a Light row on a map that EXISTS in the
+        # build (Light 269, Kalimdor), which the hotfix replaced. The row
+        # itself can survive for a retail-map Light (16161, map 3064) without
+        # affecting anything in this build. At 70009 the Kalimdor use was
+        # fixed in the client while the row stayed -- counting row presence
+        # alone reported that as still open.
         _h, lp = b.table("LightParams")
-        present = lp_id in lp
-        open_cases += present
-        notes.append(f"  LightParams {lp_id}: {'STILL IN CLIENT' if present else 'gone from client'}")
+        h_light, light = b.table("Light")
+        _hm, maps = b.table("Map")
+        cont_i = b.col(h_light, "ContinentID")
+        cols = [i for i, n in enumerate(h_light or []) if n.lower().startswith("lightparamsid")]
+        live_use, dead_use = [], []
+        for k, r in light.items():
+            if any(i < len(r) and r[i] == lp_id for i in cols):
+                on_map = cont_i is not None and cont_i < len(r) and r[cont_i] in maps
+                (live_use if on_map else dead_use).append(k)
+        open_cases += bool(live_use)
+        if live_use:
+            notes.append(f"  LightParams {lp_id}: STILL USED IN CLIENT by Light "
+                         f"{', '.join(live_use[:6])} on map(s) present in this build")
+        elif lp_id in lp and dead_use:
+            notes.append(f"  LightParams {lp_id}: no longer used on any map in this build; row survives, "
+                         f"used only by Light {', '.join(dead_use[:6])} on absent map(s)")
+        else:
+            notes.append(f"  LightParams {lp_id}: no longer used on any map in this build"
+                         + ("; row survives unused" if lp_id in lp else "; row gone"))
 
     stub_ids = rec.get("item_stub_ids")
     stub_count = rec.get("item_stub_count")
@@ -430,6 +509,11 @@ def main(argv=None):
     log("=" * 72)
     for err in rec["parse_errors"]:
         log(f"  parse warning: {err}")
+    if b.has_overlay is False:
+        log("  NO HOTFIX OVERLAY: db2_hotfixed/ equals db2/ for every table. Checks that")
+        log("  need live data report UNMEASURED. Log in on this build, re-extract, re-run.")
+    elif b.has_overlay is None:
+        log("  warning: manifest.json unreadable; cannot tell whether an overlay exists")
 
     tally = {}
     for title, fn in CHECKS:
@@ -448,6 +532,8 @@ def main(argv=None):
     log("  " + "  ".join(f"{k}: {v}" for k, v in sorted(tally.items())))
     if tally.get(FALSIFIED):
         log("  FALSIFIED findings contradict CLAUDE.md — update the record.")
+    if tally.get(UNMEASURED):
+        log("  UNMEASURED is not UNRESOLVED: the data to decide was never loaded.")
     if tally.get(RESOLVED):
         log("  RESOLVED findings can be closed out and removed from 'Findings to verify'.")
     log("=" * 72)
