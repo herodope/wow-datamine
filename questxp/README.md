@@ -46,6 +46,13 @@ names.
 | `baseXP = QuestXP[level][Difficulty_<tier>] * xpMult` | **unverified** — the hypothesis the whole exercise tests |
 | The level-penalty table and `ROUND(xp * pct / 5) * 5` | **unverified** — from the Warcraft Wiki, not measured on this client |
 
+**Server quest-XP decay rules, measured in-game 2026-09-23 on 69977**
+(`C_GameRules.GetGameRuleAsFloat(rule, 0)`): `StandardQuestXPDecayLevelOffset`
+(199) = **-5**, `MinimumXPDecayCoefficient` (200) = **0**. These look like the
+server's inputs to the level-penalty row above. The offset fits vanilla's
+five-level grace. The zero minimum would contradict the Wiki's 10% floor.
+Both readings are unverified until a far-gray turn-in is measured.
+
 `moneyTier` at offset 52 is genuinely a separate field from `tier` at offset
 40, not the same value read twice: the two agree on only 36% of records. Quest
 1487 has 6 in both, which is a coincidence and would have been misleading as a
