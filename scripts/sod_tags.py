@@ -59,18 +59,23 @@ Detection, measured on 1.60.1.70009:
                  (Shadow Bolt 1088, Purify 1152, ...). Every SoD book is 0/8.
   3 propagation  SpellEffect.EffectTriggerSpell (declared) out of a tagged
                  spell, one hop at a time, child inherits the parent's tier.
-                 NOT an edge: seal_dummy_bp (EffectAura=4 EffectBasePointsF
-                 resolving to an existing spell of the same SpellClassSet),
-                 proposed to reach Judgement of Martyrdom 407803 from Seal of
-                 Martyrdom 407798. On seals alone it is clean -- every one of
-                 the 35 classed seals with an edge (407798 included) lands on
-                 its own "Judgement of X". Over
-                 the whole population it is not: of 54 classed landings, 19
-                 are value collisions, and one tagged the base mage Blizzard
-                 (10) sod_rune via Enlightenment 412324 (bp 10). All 19 land on
-                 AcquireMethod-0 trainer spells and none of the 35 Judgements
-                 do, so "target is not a trainer spell" would separate them
-                 exactly -- a proposal, not in use. 407803 is a known gap.
+                 Plus one constrained effect-typed edge, seal_dummy_bp
+                 (source_rule 'seal_dummy_bp'): an EffectAura=4 effect whose
+                 EffectBasePointsF names an existing spell of the same
+                 SpellClassSet, that is (a) not a trainer spell (no
+                 AcquireMethod-0 SkillLineAbility row) and (b) shares a
+                 SkillLine with the source IF it has any SkillLineAbility row.
+                 That is how a seal names its Judgement: Seal of Martyrdom
+                 407798 -> Judgement of Martyrdom 407803. Measured over all 54
+                 classed aura-4 same-family landings at 70009 (35 seal ->
+                 own Judgement, 19 value collisions such as Blizzard 10 from
+                 Enlightenment's bp 10):
+                     same family only        35/35 kept, 19/19 collisions
+                     (a)                     35/35 kept,  0/19
+                     (a) + (b) strict        32/35 kept,  0/19
+                     (a) + (b) conditional   35/35 kept,  0/19   <- in use
+                 Strict (b) drops 21183, 1311650 and 1311655, Judgements with
+                 no SkillLineAbility row at all.
                  A child also referenced by an UNTAGGED spell through a
                  declared cross-spell column, or by Talent, is shared with
                  live content: the edge is blocked and the child left
@@ -512,28 +517,55 @@ def _shared_owners(data, sid, tags, cache):
 def _edges_from(data, parent):
     """(EffectIndex, kind, child, column) for every propagation edge out of `parent`.
 
-    Only `trigger`, the declared EffectTriggerSpell FK. The seal_dummy_bp
-    candidate was measured and rejected as specified; see the module
-    docstring and seal_dummy_landings().
+    `trigger` is the declared EffectTriggerSpell FK. `seal_dummy_bp` is the
+    one effect-typed edge allowed -- how a seal names its Judgement -- and
+    only under seal_dummy_ok(). See the module docstring for its validation.
     """
-    for idx, _e, _aura, _m, _bp, trig in data.effects.get(parent, ()):
+    for idx, _e, aura, _m, bp, trig in data.effects.get(parent, ()):
         if trig:
             yield idx, "trigger", trig, "EffectTriggerSpell"
+        if aura == AURA_DUMMY and bp and seal_dummy_ok(data, parent, bp):
+            yield idx, "seal_dummy_bp", bp, "EffectAura=4 EffectBasePointsF"
+
+
+def _same_family(data, source, target):
+    cs = data.class_set.get(source)
+    return bool(cs) and target in data.name and data.class_set.get(target) == cs
+
+
+def seal_dummy_ok(data, source, target):
+    """The seal_dummy_bp edge: an aura-4 base-points value naming a real Judgement.
+
+    All three must hold:
+      - the target exists and shares the source's SpellClassSet;
+      - (a) the target is not a trainer spell: no SkillLineAbility row with
+        AcquireMethod 0. The 19 value collisions (Blizzard 10, Charge 100, ...)
+        all fail this;
+      - (b) if the target has ANY SkillLineAbility row, one shares a SkillLine
+        with the source. Required only when a row exists: three real
+        Judgements (21183, 1311650, 1311655) have none.
+    """
+    if not _same_family(data, source, target):
+        return False
+    rows = data.sla.get(target, ())
+    if any(acq == 0 for acq, _sl, _cm in rows):
+        return False
+    if rows:
+        return bool({sl for _a, sl, _c in rows} & {sl for _a, sl, _c in data.sla.get(source, ())})
+    return True
 
 
 def seal_dummy_landings(data):
     """Every classed EffectAura=4 effect whose base points name a same-family spell.
 
-    The measurement behind rejecting seal_dummy_bp as an edge, kept so the
-    report can show it: [(spell, EffectIndex, target, target_is_trainer)].
+    The population seal_dummy_ok() was validated against, kept so the report
+    can show it: [(spell, EffectIndex, target, edge_allowed)].
     """
     out = []
     for sid, es in data.effects.items():
-        cs = data.class_set.get(sid)
         for idx, _e, aura, _m, bp, _t in es:
-            if (aura == AURA_DUMMY and bp and cs and bp in data.name
-                    and data.class_set.get(bp) == cs):
-                out.append((sid, idx, bp, data.is_trainer(bp)))
+            if aura == AURA_DUMMY and bp and _same_family(data, sid, bp):
+                out.append((sid, idx, bp, seal_dummy_ok(data, sid, bp)))
     return sorted(out)
 
 
@@ -572,7 +604,8 @@ def _propagate(data, tags, cov, stats):
                     tags.edges.append((parent, child, idx, "blocked: shared", kind))
                     demoted.append(child)
                     continue
-                tags.add(child, ptier, "propagation", via,
+                tags.add(child, ptier, "seal_dummy_bp" if kind == "seal_dummy_bp"
+                         else "propagation", via,
                          target_missing=child not in data.name,
                          cls=tags.rows[parent]["class"], role="propagated")
                 tags.edges.append((parent, child, idx, f"inherits {ptier}", kind))
@@ -973,10 +1006,11 @@ def render_report(result):
                  f"{len(st['propagation_demoted'])} blocked | {st['trigger_rows']:,} "
                  f"SpellEffect rows carry a trigger spell |")
         sd = seal_dummy_landings(d)
-        L.append(f"| seal_dummy_bp — **not used** | 0 | {len(sd)} classed aura-4 landings on a "
-                 f"same-family spell; {sum(1 for x in sd if x[3])} of them on trainer spells "
-                 f"(value collisions, e.g. Blizzard 10); {st['seal_dummy_rows']:,} aura-4 "
-                 f"effects carry a nonzero EffectBasePointsF |")
+        L.append(f"| seal_dummy_bp (aura 4, same family, not trainer, SkillLine if any) | "
+                 f"{bk.get('seal_dummy_bp', 0)} inherited | {sum(1 for x in sd if x[3])} of "
+                 f"{len(sd)} classed aura-4 same-family landings pass the edge; the rest are "
+                 f"value collisions (Blizzard 10, Charge 100); {st['seal_dummy_rows']:,} "
+                 f"aura-4 effects carry a nonzero EffectBasePointsF |")
     if "variant_pairs" in st:
         L.append(f"| variant pairs | {len(st['variant_pairs'])} | "
                  f"{st['override_same_name']} same-name aura-332 overrides out of tagged "

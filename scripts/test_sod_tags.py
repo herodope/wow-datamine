@@ -61,11 +61,26 @@ class SodTags(unittest.TestCase):
                 self.assertEqual(r["source_rule"], "propagation")
                 self.assertNotEqual(r["tier"], sod_tags.FLAG)
 
-    def test_known_gap_judgement_of_martyrdom(self):
-        # Reached only by seal_dummy_bp, which is rejected: over all classed
-        # aura-4 landings it tags base Blizzard 10. If this starts passing
-        # through some other route, look at how before celebrating.
-        self.assertIsNone(tier(407803))
+    def test_seal_dummy_bp(self):
+        # Seal of Martyrdom 407798 (book) names Judgement of Martyrdom 407803
+        # in an aura-4 effect's base points.
+        r = RESULT["tags"].get(407803)
+        self.assertIsNotNone(r)
+        self.assertEqual(r["tier"], sod_tags.BOOK)
+        self.assertEqual(r["source_rule"], "seal_dummy_bp")
+
+    def test_seal_dummy_bp_validation(self):
+        land = sod_tags.seal_dummy_landings(RESULT["data"])
+        name = RESULT["data"].name
+
+        def judgement(s, t):
+            return (name.get(s, "").startswith("Seal of")
+                    and name[t] == "Judgement of " + name[s][len("Seal of "):])
+
+        seals = [x for x in land if judgement(x[0], x[2])]
+        other = [x for x in land if not judgement(x[0], x[2])]
+        self.assertEqual(sum(1 for x in seals if x[3]), len(seals))   # 35/35
+        self.assertEqual(sum(1 for x in other if x[3]), 0)            # 0/19
 
     def test_sod_variant(self):
         for s in (415068, 429145):

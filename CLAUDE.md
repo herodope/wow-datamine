@@ -559,7 +559,7 @@ the weaker tier.
 | Tier | Meaning | Cut view? | 70009 |
 |---|---|---|--:|
 | `sod_rune` | full engraving chain | yes | 829 |
-| `sod_book_candidate` | taught by a learn item with no `ItemSparse` row. Not proof | yes | 19 |
+| `sod_book_candidate` | taught by a learn item with no `ItemSparse` row. Not proof | yes | 20 |
 | `sod_ported` | SoD ability whose same-name trainer sibling is absent from the SoD-era client, so Forever re-added it | no | 23 |
 | `sod_variant` | SoD ID of a spell whose base version is an untagged trainer spell | no | 94 |
 | `sod_flag` | weak signal only | no | 87 |
@@ -593,6 +593,30 @@ the weaker tier.
      are the measured cases.
    - Never propagate through `SpellClassMask` / `EffectSpellClassMask`:
      talents hit base spells too.
+   - One effect-typed edge, **`seal_dummy_bp`** (`source_rule =
+     'seal_dummy_bp'`, tier inherited). It is how a seal names its Judgement:
+     an `EffectAura`=4 effect whose `EffectBasePointsF` is an existing spell
+     of the same SpellClassSet. Two more conditions apply:
+     - (a) the target is not a trainer spell: it has no AcquireMethod-0
+       `SkillLineAbility` row.
+     - (b) **if** the target has any `SkillLineAbility` row, one shares a
+       SkillLine with the source.
+
+     It reaches Judgement of Martyrdom 407803 from Seal of Martyrdom 407798.
+     Measured over all 54 classed aura-4 same-family landings at 70009: 35
+     are a seal naming its own Judgement, and 19 are value collisions.
+
+     | Condition | Judgements kept | Collisions through |
+     |---|--:|--:|
+     | same family only | 35/35 | **19/19** (Blizzard 10 tagged `sod_rune` from Enlightenment 412324) |
+     | (a) alone | 35/35 | 0/19 |
+     | (a) + (b) strict | 32/35 | 0/19 |
+     | **(a) + (b) conditional, in use** | **35/35** | **0/19** |
+
+     Strict (b) loses 21082 → 21183 (Crusader), 1311649 → 1311650 and
+     1311656 → 1311655 (Fury). Those Judgements have no `SkillLineAbility`
+     row at all, which is why (b) applies only when a row exists.
+     `test_sod_tags.py` re-checks both numbers on every run.
 4. **Variants.** Two routes:
    - (a) **Aura 332 is an override.** `MiscValue_0` names the spell replaced,
      `EffectBasePointsF` the replacement. So the base of a pair is named, not
@@ -627,20 +651,12 @@ under Mage against ~85 for every other class.
   wrappers.
 - **AcquireMethod=3 alone.** Every Judgement of X has it.
 - **Raw value scans, "unreferenced", or "no display data".**
-- **`seal_dummy_bp`.** An aura-4 `EffectBasePointsF` resolving to a
-  same-family spell was proposed to reach Judgement of Martyrdom 407803. On
-  the 37 learnable seals it is clean: 35, 407798 among them, land on their own
-  Judgement, and 2 (20154, 407799) have no edge. Over all 54 classed landings it is not: **19 are value
-  collisions**, and one tagged the base mage Blizzard (10) `sod_rune` from
-  Enlightenment 412324. Adding "target is not a trainer spell" would separate
-  them exactly (all 19 collisions are AcquireMethod 0; none of the 35
-  Judgements is). That is a proposal, not in use.
+- **Aura-4 base points without the `seal_dummy_bp` conditions.** On
+  their own they are raw value matches (see the table under step 3).
 
-**Known gaps.**
-- Judgement of Martyrdom 407803: see `seal_dummy_bp` above.
-- Hammer of Wrath 429151: no label, trigger, override or inbound declared
-  reference. It is in `sod_manual.json` as `sod_flag`, because its
-  `BonusCoefficientFromAP` of 0.15 is SoD's; the base ranks have 0.
+**Known gap.** Hammer of Wrath 429151 has no label, trigger, override or
+inbound declared reference. It is in `sod_manual.json` as `sod_flag`, because
+its `BonusCoefficientFromAP` of 0.15 is SoD's; the base ranks have 0.
 
 **Two hand-kept files**, both `{spell_id, reason, source, date}`, applied
 after detection:
