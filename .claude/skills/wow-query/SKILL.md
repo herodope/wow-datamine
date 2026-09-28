@@ -177,7 +177,7 @@ Three proposed detectors were rejected on exactly this, after measurement:
 | Proposed rule | Base rate | Verdict |
 |---|---|---|
 | ID in a "modern retail range" | 160 of 233 `Achievement` rows | rejected |
-| Item has no `ItemSparse` row | 8,286 of 31,675 | rejected as a trigger |
+| Item has no `ItemSparse` row | 8,257 of 31,818 live, 12,594 shipped (1.60.1.70009) | rejected as a trigger |
 | Row is unreferenced | 63.5% of spells, **identical** for classic and modern IDs | rejected |
 
 Before reporting "N rows look wrong", compute how many rows look that way in

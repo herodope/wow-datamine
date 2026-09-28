@@ -696,7 +696,7 @@ def render_contamination(c):
         L.append(f"<p>{cov['rows_submitted']:,} row(s) across "
                  f"{cov['tables_submitted']} table(s) were submitted and "
                  f"<strong>no rule was able to read any of them</strong>. "
-                 f"The rules are narrow and two of the three are pinned to a "
+                 f"The rules are narrow and two of the four are pinned to a "
                  f"single table by name, so they returned nothing for lack of "
                  f"anything to read — not because the data looks clean.</p>")
         L.append("<p>Treat this as unmeasured.</p>")

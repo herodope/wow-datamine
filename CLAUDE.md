@@ -419,15 +419,20 @@ retail, so retail-era rows leak into tables that should hold only Classic
 content. They get pruned over time. **Track them per build: a new one appearing
 is a signal, and one disappearing tells you Blizzard noticed.**
 
-`scripts/contamination.py` runs as part of the hotfix report. Rules, ranked by
-how much they actually discriminate:
+`scripts/contamination.py` runs in three places, all through `scan()`:
+`diff_hotfixes.py` (the hotfix report), `diff_builds.py` (the build diff) and
+`render_patchnotes.py` (every HTML mode, including `--since` waves).
+`diff_builds.py` hands it the **shipped** `db2/` tables; the other two hand it
+the **live** overlay first. The rules' reference data, and the orphan base rate
+below, differ by variant accordingly. Rules, ranked by how much they actually
+discriminate:
 
 | Rule | Confidence | What it catches |
 |---|---|---|
 | `dangling_map_ref` | **MEDIUM** (added rows) / HIGH (removed rows) | A row references a Map ID absent from this build. Was HIGH on the 69913 measurement (1 of 233 `Achievement` rows, near-zero false positives). **1.60.1.70009 broke that**: 8 added `Achievement` rows hit it, and the Shaper's Terrace, Alcaz Prison, Hyjal Summit and Barrow Deeps boss statistics are unreleased **Forever** dungeons whose `Map` rows are withheld, not retail leftovers |
 | `withheld_map_ref` | LOW | The same, but the absent map has `MapDifficulty` rows in this build, so the map exists and only its definition is withheld. Maps 2994 and 3001 at 70009. For watching, not a contamination verdict |
 | `light_absent_map` | HIGH | A `LightParams` ID whose only referencing `Light` rows sit on absent maps |
-| `orphan_removal` | MEDIUM | Rows pulled together in one push that carry no supporting display data |
+| `orphan_removal` | MEDIUM | Any removal of **≥ 1** `Item` row with no `ItemSparse`/`ItemSearchName` row. No threshold; the finding states the count, and the reader judges whether it was coordinated (push 112078 pulled 75 at once) |
 
 **Appearing vs leaving.** Both reports now split findings in two. Rows that
 were **added** (or values that are newly referenced) are *appearing*. Rows that
@@ -448,10 +453,14 @@ do not discriminate in this build:
 - **ID falls in a "modern retail range".** `Achievement` IDs run 627–64159 with
   160 of 233 rows above 61000, so an ID-range test flags most of the table. ID
   ranges are supporting evidence only, never a trigger.
-- **Item row has no ItemSparse/ItemSearchName data.** 8,286 of 31,675 `Item`
-  rows lack display data, because `ItemSparse` ships incomplete and arrives by
-  hotfix. Orphanhood alone would flag a quarter of the table. What is
-  suspicious is a **coordinated removal** of orphans in a single push.
+- **Item row has no ItemSparse/ItemSearchName data.** Measured at
+  **1.60.1.70009**: **12,594 of 31,818** `Item` rows (39.6%) in the shipped
+  `db2/`, **8,257 of 31,818** (26.0%) live. At 69913 it was 12,504 of 31,675
+  shipped and 8,124 of 31,603 live. `ItemSparse` ships incomplete and arrives
+  by hotfix, so orphanhood alone would flag a quarter to two fifths of the
+  table. The rule fires only on orphans being **removed**, from one row up,
+  and reports how many. (An earlier "8,286 of 31,675" matched neither variant
+  and has been withdrawn.)
 - **The row is unreferenced.** Proposed after the 461xxx Thunder Clap ladder
   turned out to be defined but unconsumed (finding #7). Measured before
   writing it, across four ways of deciding which FK columns count as the

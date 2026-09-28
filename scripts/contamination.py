@@ -29,13 +29,24 @@ Rules are ranked by how much they actually discriminate, measured against
   rows was the other half of the 70009 problem.
   light_absent_map   HIGH   -- a LightParams ID whose only referencing Light
                               rows sit on maps absent from this build.
-  orphan_removal     MEDIUM -- rows removed together that carry no supporting
-                              display data. Orphanhood ALONE is not a signal:
-                              12,504 of 31,675 Item rows (39.5%) lack an
-                              ItemSparse/ItemSearchName row in this build,
-                              because ItemSparse ships incomplete and arrives
-                              by hotfix. What is suspicious is a coordinated
-                              removal of such rows in a single push.
+  orphan_removal     MEDIUM -- fires on ANY removal of >= 1 Item row that has
+                              no ItemSparse/ItemSearchName row. There is no
+                              threshold: a single orphan removed fires it, and
+                              the finding states the count, so the reader
+                              judges whether it looks coordinated (the 69913
+                              push 112078 removed 75 at once). Orphanhood
+                              ALONE is not a signal, because ItemSparse ships
+                              incomplete and arrives by hotfix. Base rate at
+                              1.60.1.70009, per variant, since the callers
+                              read different ones:
+                                shipped (db2/, diff_builds)        12,594 of
+                                  31,818 Item rows (39.6%)
+                                live (db2_hotfixed/, diff_hotfixes,
+                                  render_patchnotes)                8,257 of
+                                  31,818 (26.0%)
+                              (69913: shipped 12,504 of 31,675, live 8,124 of
+                              31,603. An earlier "8,286 of 31,675" matched
+                              neither variant and is withdrawn.)
 
 Deliberately NOT a rule: "ID falls in a modern retail range". Achievement IDs
 here run 627-64159 with 160 of 233 rows above 61000, so an ID-range test would
@@ -67,7 +78,7 @@ Being unreferenced carries no information about whether a row is retail-era.
 Most spells in any build are NPC abilities, triggered effects, item procs and
 internal auras -- nothing is supposed to reference them. So an unreferenced
 row is the NORMAL state, not a signal, and this would be worse than
-orphan_removal was before it was narrowed (8,286 of 31,675 Item rows, 26%).
+orphanhood is for Item rows (8,257 of 31,818 live at 70009, 26.0%).
 
 What IS informative is a PAIRED comparison -- two rows with the same name and
 rank where one is fully wired and the other is not, which is what finding #7
@@ -324,18 +335,19 @@ def _orphan_removal(result, ref, load_table):
         "table": "Item",
         "record": f"{len(orphans)} rows",
         "detail": (
-            f"{len(orphans)} removed rows have no ItemSparse/ItemSearchName data "
+            f"{len(orphans)} removed row(s) have no ItemSparse/ItemSearchName data "
             f"({combo_str}; {inv_str}). Orphanhood alone is NOT a signal — "
             f"{sum(1 for k in items if k not in ref['items_with_data']):,} of "
             f"{len(items):,} Item rows lack display data in this build, because "
-            f"ItemSparse ships incomplete and arrives by hotfix. The signal is that "
-            f"these were removed together."
+            f"ItemSparse ships incomplete and arrives by hotfix. The rule fires on "
+            f"any removal of >= 1 such row, with no threshold; judge from the count "
+            f"({len(orphans)}) whether this was a coordinated pull."
         ),
         "side": "removed",
     }]
 
 
-# Every rule here is narrow, and two of the three are pinned to a single table
+# Every rule here is narrow, and two of the four are pinned to a single table
 # by name. applicability() states that up front so a zero can be told apart
 # from data no rule could read. See "an unscanned zero is not a clean result"
 # in CLAUDE.md.
@@ -352,6 +364,15 @@ def applicability(result):
         why += "; no added/removed rows"
     yield ("dangling_map_ref", bool(map_cols) and has_add_rm, why)
 
+    # withheld_map_ref is emitted by the same code path, for ADDED rows only.
+    # It used to be missing from ALL_RULES and from here, so coverage never
+    # listed it as run, skipped or never-applicable.
+    why_w = "same columns as dangling_map_ref, added rows only; "
+    why_w += ("found " + ", ".join(map_cols)) if map_cols else "table carries none of them"
+    if not result.get("added"):
+        why_w += "; no added rows"
+    yield ("withheld_map_ref", bool(map_cols) and bool(result.get("added")), why_w)
+
     why = "scoped to table Light"
     if table != "Light":
         why += "; this is " + str(table)
@@ -367,7 +388,7 @@ def applicability(result):
     yield ("orphan_removal", table == "Item" and bool(result.get("removed")), why)
 
 
-ALL_RULES = {"dangling_map_ref", "light_absent_map", "orphan_removal"}
+ALL_RULES = {"dangling_map_ref", "withheld_map_ref", "light_absent_map", "orphan_removal"}
 
 
 def scan(results, load_table):
@@ -464,7 +485,7 @@ def render_markdown(findings, coverage=None):
             "",
             "{:,} row(s) across {} table(s) were submitted and **no contamination "
             "rule was able to read any of them**. The rules are narrow, and two of "
-            "the three are pinned to a single table by name, so they returned "
+            "the four are pinned to a single table by name, so they returned "
             "nothing for lack of anything to read -- not because the data looks "
             "clean. Treat this as unmeasured.".format(
                 coverage["rows_submitted"], coverage["tables_submitted"]),
