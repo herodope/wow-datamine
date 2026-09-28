@@ -1,0 +1,12 @@
+{
+  "_comment": "Hand-audited SoD tags for spells no structural signal in scripts/sod_tags.py reaches. Applied after detection with source_rule 'manual'; an entry never overrides a detected tag (a clash is reported instead). Record what was checked, not a guess.",
+  "entries": [
+    {
+      "spell_id": 429151,
+      "tier": "sod_flag",
+      "reason": "SoD HoW rank, has AP coefficient 0.15, no structural link",
+      "source": "repo owner; BonusCoefficientFromAP 0.15 vs 0 on base ranks 24239/24274/24275 checked at 1.60.1.70009",
+      "date": "2026-09-28"
+    }
+  ]
+}

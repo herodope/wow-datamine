@@ -309,6 +309,17 @@ enums and flags decoded) and can be run directly:
 python scripts/enrich.py Achievement 9275
 ```
 
+`wow.db` also carries `sod_tags`: Season of Discovery content sitting in the
+snapshot, one tier per spell with an auditable reason chain. It annotates and
+never filters. A query leaves SoD content out only by joining it, and only
+`sod_rune` / `sod_book_candidate` count as cut. `sod_tags.py` writes the full
+report:
+
+```powershell
+python scripts/sod_tags.py                 # reports/sod_tags_<build>.md
+python scripts/sod_tags.py --spell 407798  # one spell's tier and chain
+```
+
 ### MCP server
 
 [`scripts/mcp_server.py`](scripts/mcp_server.py) exposes the same database
@@ -497,6 +508,7 @@ Blizzard rotates a build off the version list, its config hashes are gone.
 | `mcp_server.py` | The same database over MCP stdio (needs `requirements.txt`) |
 | `enrich.py` | Resolve IDs to names, enums and flags; imported by the reporters |
 | `contamination.py` | Detect retail-era data that leaked into a Classic+ build; splits findings into *appearing* and *leaving* |
+| `sod_tags.py` | Tag Season of Discovery content in a snapshot; materialised into `wow.db` by `build_db.py`, report in `reports/` |
 | `diff_builds.py` | Compare two builds' shipped DB2s, emit markdown; flags schema and layout changes |
 | `diff_hotfixes.py` | Compare `db2/` against `db2_hotfixed/` within one build |
 | `render_patchnotes.py` | Render either diff as standalone HTML patch notes |

@@ -12,6 +12,14 @@ Three sets of tables land in one database:
     plain_<Table>    from db2/           -- as shipped in the client
     gt_<Name>        from gametables/    -- tab-separated, not DB2s
 
+Two derived tables are added after the load, by `sod_tags.py`:
+
+    sod_tags          one row per spell tagged as Season of Discovery content
+    sod_tags_coverage which detection steps could run on this build
+
+They annotate; they never filter. A query excludes SoD content only if it
+joins `sod_tags`.
+
 So the comparison this repo is built around is one query:
 
     SELECT h.ID, p.Display_lang AS shipped, h.Display_lang AS live
@@ -53,6 +61,7 @@ import time
 from datetime import datetime, timezone
 
 import config
+import sod_tags
 
 csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 
@@ -266,6 +275,29 @@ def main(argv=None):
         log(f"    {n_tables} table(s) loaded, "
             f"{sum(v['rows'] for v in loaded.values() if v['source'] == sub):,} rows")
 
+    # SoD tags: a snapshot-wide annotation over the live tables just loaded.
+    # Log, don't crash -- a failure here must not cost the whole database, but
+    # it must be loud, and _build_info records it so a missing sod_tags table
+    # is never mistaken for "this build has no SoD content".
+    sod = {"status": "skipped"}
+    try:
+        result = sod_tags.detect(conn, build)
+        with conn:
+            sod_tags.materialize(conn, result, build)
+        sod = {
+            "status": "ok",
+            "tiers": {t: sum(1 for r in result["tags"].values() if r["tier"] == t)
+                      for t in sod_tags.TIERS},
+            "not_scanned": [c["step"] for c in result["coverage"]
+                            if c["status"] != "scanned"],
+            "reference_build": result["data"].reference_build,
+        }
+        log("  sod_tags: " + ", ".join(f"{t} {n}" for t, n in sod["tiers"].items())
+            + (f"; NOT SCANNED: {', '.join(sod['not_scanned'])}" if sod["not_scanned"] else ""))
+    except Exception as exc:                          # noqa: BLE001 - log, don't crash
+        sod = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+        log(f"  !! sod_tags FAILED, tables not written: {sod['error']}")
+
     # A database that cannot say what it is gets mistaken for another build.
     with conn:
         conn.execute("DROP TABLE IF EXISTS _build_info")
@@ -276,6 +308,7 @@ def main(argv=None):
              ("generatedAt", datetime.now(timezone.utc).replace(microsecond=0).isoformat()),
              ("tables", str(len(loaded))),
              ("skipped_empty", str(len(skipped))),
+             ("sod_tags", json.dumps(sod)),
              ("note", "unprefixed = db2_hotfixed (live); plain_ = db2 (as shipped); "
                       "gt_ = GameTables (tab-separated, not DB2s)")])
 
@@ -303,6 +336,7 @@ def main(argv=None):
             for s in {v["source"] for v in loaded.values()}
         },
         "row_counts": {k: v["rows"] for k, v in sorted(loaded.items())},
+        "sod_tags": sod,
     }
     mpath = out_dir / "manifest.json"
     if mpath.exists():

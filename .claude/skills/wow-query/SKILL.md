@@ -207,6 +207,38 @@ e.decode("Item", "SubclassID", 0, {"ClassID": "4"})
 `e.item()` matters in particular: `/dbc/tooltip/item/` is non-hotfixed and
 returns `"Unknown Item"` for the 4,218 hotfix-only rows, with a 200.
 
+### 9. `sod_tags` is an annotation, and only two of its tiers mean "cut"
+
+The client Forever was cut from carried Season of Discovery content, and it
+is still in the snapshot. `sod_tags` marks it: one row per tagged spell
+(`spell_id`, `tier`, `reason_chain`, `source_rule`, `target_missing`,
+`live_in_forever`, `pair_base_id`, `forever_sibling_id`, `class_name`).
+`sod_tags_coverage` says which detection steps ran. A step marked
+`not_scanned` means an untagged spell was never examined, not that it is clean.
+
+| Tier | Meaning | Cut? |
+|---|---|---|
+| `sod_rune` | full engraving chain (engrave → enchant → rune spell → ability) | likely |
+| `sod_book_candidate` | taught by a learn item with no `ItemSparse` row | **not proof** |
+| `sod_ported` | SoD ability that Forever re-added as a trainer spell (`forever_sibling_id`) | no |
+| `sod_variant` | SoD ID of a spell whose base version is untagged (`pair_base_id`) | no |
+| `sod_flag` | weak signal only, e.g. a label on its own | no |
+
+`sod_book_candidate` and `sod_flag` are **not** evidence that content was
+cut. `live_in_forever = 1` means the tag is allowlisted as live. Nothing
+excludes SoD content unless the query joins the table. To leave out cut spells:
+
+```sql
+SELECT n.ID, n.Name_lang
+FROM SpellName n
+LEFT JOIN sod_tags t ON t.spell_id = n.ID
+WHERE (t.tier IS NULL OR t.live_in_forever = 1
+       OR t.tier IN ('sod_ported', 'sod_variant', 'sod_flag'))
+```
+
+Read `reason_chain` before repeating a tier as fact; it is the evidence.
+Use `enrich.Enricher.sod_tag(id)` from Python.
+
 ---
 
 ## Worked examples
@@ -328,5 +360,6 @@ clean result.
 - Is any enum context-gated? (rule 4)
 - What is the base rate for the pattern being reported? (rule 6)
 - Is a missing table actually "not in this build"? (rule 7)
+- Is SoD content in the result, and should it be? Join `sod_tags` (rule 9)
 - For "what changed live", is the join between the unprefixed and `plain_`
   tables, rather than one of them alone?

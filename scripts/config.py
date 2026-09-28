@@ -66,6 +66,13 @@ NEAR_MISSES: list = []
 _warned_near_misses: set = set()
 
 
+# The SoD-era client that sod_tags.py checks Forever's trainer spells against
+# (a sibling absent from it was added by Forever: sod_ported). The newest
+# extracted build matching this is used. These builds are NOT Forever and are
+# never diffed against it; only their SpellName IDs are read.
+SOD_REFERENCE_VERSION_PATTERN = r"^1\.15\."
+
+
 def classify_build(version: str, build_id: int) -> tuple:
     """(verdict, detail). Verdict is 'forever', 'near_miss' or 'foreign'.
 
@@ -149,6 +156,8 @@ def cdns_url(region: str = DEFAULT_REGION) -> str:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 BUILDS_JSON = REPO_ROOT / "builds.json"   # committed — buildConfig/cdnConfig per build
+SOD_ALLOWLIST = REPO_ROOT / "sod_allowlist.json"  # committed — SoD tags known live in Forever
+SOD_MANUAL = REPO_ROOT / "sod_manual.json"        # committed — hand-audited SoD tags
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 OUT_DIR = REPO_ROOT / "out"               # gitignored — extracted data
 REPORTS_DIR = REPO_ROOT / "reports"       # gitignored — generated diff output

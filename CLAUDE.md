@@ -524,6 +524,134 @@ here. Check these IDs; keep the population figure as context only.
 
 ---
 
+## Season of Discovery tags
+
+Forever was cut from a 1.15 client that carried Season of Discovery, and SoD
+content is still in every snapshot. `scripts/sod_tags.py` tags it, and
+`build_db.py` materialises the result into `wow.db` as `sod_tags` and
+`sod_tags_coverage`. The report is `reports/sod_tags_<build>.md`. From Python,
+use `enrich.Enricher.sod_tag(id)`.
+
+> **This is deliberately NOT a contamination rule. Do not move it into
+> `contamination.scan()`.** The retail filter is diff-scoped: it reads only
+> rows added or removed between two builds, emits independent per-rule
+> findings, never merges them into a per-row verdict, has no allowlist, and is
+> not queryable from `wow.db`. SoD content is not changing between builds. It
+> is simply present. So this is a **snapshot-wide annotation**: one merged tier
+> per spell, a manual allowlist, and a table you can join. Each design suits
+> its question. "Fixing" one to match the other breaks it.
+
+**Tagging, never deletion.** Nothing is removed and no existing query changes
+behaviour. A query excludes SoD content only if it joins `sod_tags` (see rule
+9 in the wow-query skill). The bias is toward under-tagging. A false "cut" on
+a live Forever spell is worse than a missed SoD spell, so ambiguous cases take
+the weaker tier.
+
+| Tier | Meaning | Cut view? | 70009 |
+|---|---|---|--:|
+| `sod_rune` | full engraving chain | yes | 829 |
+| `sod_book_candidate` | taught by a learn item with no `ItemSparse` row. Not proof | yes | 19 |
+| `sod_ported` | SoD ability whose same-name trainer sibling is absent from the SoD-era client, so Forever re-added it | no | 23 |
+| `sod_variant` | SoD ID of a spell whose base version is an untagged trainer spell | no | 94 |
+| `sod_flag` | weak signal only | no | 87 |
+
+### Detection, measured on 1.60.1.70009
+
+1. **Rune chain.** Each hop is gated on its exact Effect/EffectAura value:
+   - `SpellName 'Engrave %'`, via `SpellEffect` Effect=54 and `MiscValue_0`,
+     leads to `SpellItemEnchantment`.
+   - The enchant's `Effect_N`=3 and `EffectArg_N` lead to the wrapper spell.
+   - The wrapper's `EffectAura`=332 and `EffectBasePointsF` lead to the
+     granted ability.
+
+   Only `EffectArg` is a declared FK. **270 chains from 271 names.** Cutty's
+   Rune 401488 has no Effect=54 and gets `sod_flag`. 13 chain IDs have no
+   `SpellName` row (`target_missing`), including Crusader Strike 407676 and
+   Avenger's Shield 407669. Four of the 13 are wrappers, not abilities.
+2. **Book set.** `ItemEffect` TriggerType=6 leads, via `ItemXItemEffect`, to
+   an item with no live `ItemSparse` row that teaches a spell with
+   SpellClassSet > 0.
+   - 343 of 3,314 learn items lack `ItemSparse`, and 321 of those are
+     excluded.
+   - 312 teach nothing with a class set.
+   - 9 are `Item` ClassID 9 (Recipe): vanilla class books teaching ranked base
+     spells (Shadow Bolt 1088, Purify 1152). Every SoD book is 0/8.
+3. **Propagation.** Via `EffectTriggerSpell` only (declared), one hop at a
+   time; the child inherits the parent's tier.
+   - A child referenced by an untagged spell through a declared cross-spell
+     column, or by `Talent`, is shared with live content. The edge is blocked
+     and the child stays untagged. Forbearance 25771 and Dummy Trigger 18350
+     are the measured cases.
+   - Never propagate through `SpellClassMask` / `EffectSpellClassMask`:
+     talents hit base spells too.
+4. **Variants.** Two routes:
+   - (a) **Aura 332 is an override.** `MiscValue_0` names the spell replaced,
+     `EffectBasePointsF` the replacement. So the base of a pair is named, not
+     guessed. Exorcist 415076 overrides Exorcism 879…10314 with
+     415068…415073. Rune targets that override a same-name trainer spell
+     (Fire Blast, Renew, Raptor Strike ranks) are variants, not runes.
+   - (b) Same `Name_lang` and SpellClassSet as an untagged trainer spell
+     (AcquireMethod 0 plus `SpellLevels`), where the SoD side is tagged by
+     steps 1–3 or carries label 3096/3100. When the SoD side was tagged and
+     the sibling is **absent from the newest extracted 1.15 build**
+     (`config.SOD_REFERENCE_VERSION_PATTERN`; 1.15.9.69722 here), the tier is
+     `sod_ported` with `forever_sibling_id`.
+
+   The ported rule is a presence check against a real build, not an ID range.
+   It splits 23 ported (Mutilate 399956 ↔ 1241582, Penance, Riptide, …) from
+   3 variants whose siblings are classic (Raptor Strike 415335 ↔ 14260).
+5. **Labels.** 3071 corroborates engraves (237 of 238 uses). 3096 (430
+   spells) and 3100 (214) are mixed and give `sod_flag` on their own, never
+   promotion.
+
+**Class is the chain origin's**: the engrave for a rune chain, the taught
+spell for a book, the parent for an edge. It is taken from
+`SkillLineAbility.ClassMask` first and SpellClassSet second. SpellClassSet is
+unreliable on SoD spells. Exorcist 415076 is family 5 (warlock) with
+ClassMask 2 (Paladin), and a SpellClassSet-first attribution put 150 runes
+under Mage against ~85 for every other class.
+
+**Not signals**, each for a measured reason:
+- **Spell ID ranges.** 400k–460k collides with retail DF/TWW IDs, and >1M
+  holds Forever-native spells.
+- **EffectAura=332 alone.** 510 spells carry it; the rune chain reaches 264
+  wrappers.
+- **AcquireMethod=3 alone.** Every Judgement of X has it.
+- **Raw value scans, "unreferenced", or "no display data".**
+- **`seal_dummy_bp`.** An aura-4 `EffectBasePointsF` resolving to a
+  same-family spell was proposed to reach Judgement of Martyrdom 407803. On
+  the 37 learnable seals it is clean: 35, 407798 among them, land on their own
+  Judgement, and 2 (20154, 407799) have no edge. Over all 54 classed landings it is not: **19 are value
+  collisions**, and one tagged the base mage Blizzard (10) `sod_rune` from
+  Enlightenment 412324. Adding "target is not a trainer spell" would separate
+  them exactly (all 19 collisions are AcquireMethod 0; none of the 35
+  Judgements is). That is a proposal, not in use.
+
+**Known gaps.**
+- Judgement of Martyrdom 407803: see `seal_dummy_bp` above.
+- Hammer of Wrath 429151: no label, trigger, override or inbound declared
+  reference. It is in `sod_manual.json` as `sod_flag`, because its
+  `BonusCoefficientFromAP` of 0.15 is SoD's; the base ranks have 0.
+
+**Two hand-kept files**, both `{spell_id, reason, source, date}`, applied
+after detection:
+- `sod_allowlist.json` keeps the detected tier but sets
+  `live_in_forever = 1`, which removes the spell from every cut view. It is
+  seeded with Enhanced Blessings 435984, folded into baseline blessings in
+  Forever.
+- `sod_manual.json` adds a `tier` field. Its tags carry `source_rule =
+  'manual'` and never override a detected tag; a clash is reported instead.
+
+**Coverage.** `sod_tags_coverage` records per step whether its source tables
+exist and are non-empty in the build (rule 7 of the skill). A step that could
+not run reads **NOT SCANNED** in the report and in the table, never zero.
+`_build_info.sod_tags` records `ok` or the error. If detection fails,
+`build_db.py` logs it loudly and still writes the rest of the database, and a
+missing `sod_tags` table is then an error, not "no SoD content".
+`scripts/test_sod_tags.py` pins the measured IDs.
+
+---
+
 ## Findings to verify
 
 Dated predictions from 1.60.1.69913, recorded **2026-09-20** (finding 8 added
@@ -1111,6 +1239,8 @@ apply to the libraries.
 ├── .claude/skills/wow-query/SKILL.md   # how to query wow.db, and the rules
 ├── README.md
 ├── builds.json              # manifest index — buildConfig/cdnConfig per build
+├── sod_allowlist.json       # SoD tags known live in Forever (live_in_forever=1)
+├── sod_manual.json          # hand-audited SoD tags no signal reaches
 ├── requirements.txt         # one entry: mcp. everything else is stdlib
 ├── scripts/
 │   ├── config.py            # product code, paths, build filter — SINGLE SOURCE
@@ -1121,6 +1251,8 @@ apply to the libraries.
 │   ├── inventory.py         # file listing + magic-byte classification
 │   ├── extract_gametables.py# GameTables/*.txt -- NOT DB2s, see Key facts
 │   ├── enrich.py            # ID -> human-readable context, for the reports
+│   ├── sod_tags.py          # SoD annotation -> sod_tags in wow.db; NOT contamination
+│   ├── test_sod_tags.py     # pins the measured SoD IDs (stdlib unittest)
 │   ├── build_db.py          # CSVs -> out/<build>/wow.db, one queryable file
 │   ├── query.py             # read-only SQL CLI over wow.db
 │   ├── mcp_server.py        # same database over MCP stdio, read-only
@@ -1139,6 +1271,7 @@ apply to the libraries.
 │   ├── <from>_to_<to>.md
 │   ├── hotfix_<build>.md
 │   ├── hotfixwave_<build>_since_<date>.html
+│   ├── sod_tags_<build>.md              # SoD tiers, chains, coverage
 │   ├── patchnotes_<build>.html          # readable, self-contained
 │   └── patchnotes_<from>_to_<to>.html
 └── vendor/                  # GITIGNORED — cloned third-party tools
@@ -1182,6 +1315,10 @@ Two details worth knowing before querying:
   mis-sniff degrades safely — SQLite stores a value that will not convert
   as-is.
 
+Two derived tables follow the load: `sod_tags` and `sod_tags_coverage` (see
+**Season of Discovery tags**). They are computed from the live tables and
+annotate only.
+
 At 1.60.1.69913: 1,263 tables, 3,844,494 rows, 4,210 indexes, ~317 MB, ~20s.
 69876 and 69893 load 1,262 — they have no `TimeEventData`, which exists only
 as hotfix data. `_build_info` records which build the file is for, so one
@@ -1207,7 +1344,7 @@ and that a missing table usually means "not in this build".
 > files — which is the right default and should stay.
 >
 > This file is not that. It is shared documentation: the schema's prefixes,
-> the join paths, and eight rules each derived from a measurement recorded in
+> the join paths, and nine rules each derived from a measurement recorded in
 > this document. Anyone cloning the repo needs it to query `wow.db` without
 > repeating mistakes that are already written down — resolving FKs by value
 > and picking up numeric collisions, missing array-suffixed FK columns,
@@ -1234,7 +1371,7 @@ Install with `pip install -r requirements.txt` — see **Prerequisites**.
   refuses a query with neither `LIMIT` nor `WHERE` against a table over
   10,000 rows. Aggregates without `GROUP BY` are exempt, so
   `SELECT COUNT(*) FROM ItemSparse` works.
-- `get_conventions` returns the eight rules from
+- `get_conventions` returns the nine rules from
   `.claude/skills/wow-query/SKILL.md` **verbatim**. It exists because an MCP
   client cannot see the skill file, and without those rules it will reproduce
   exactly the mistakes they were written to prevent.

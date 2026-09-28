@@ -41,6 +41,7 @@ Usage as a library:
     e.label("Achievement", 9275)      -> "Warlord Zaela kills (Upper ...)"
     e.item(720)                       -> {... "source": "join" ...}
     e.resolve("Light", 16161)         -> full structure
+    e.sod_tag(407798)                 -> {"tier": "sod_book_candidate", ...}
 
 Usage as a smoke test:
 
@@ -246,6 +247,7 @@ class Enricher:
         self._tooltips = {}      # ("item"|"spell", id) -> dict|None
         self._light_by_param = None
         self._files = None
+        self._sod = None
         self._dirty = set()
         atexit.register(self.flush)
 
@@ -593,6 +595,30 @@ class Enricher:
             if val:
                 return val
         return None
+
+    # --- Season of Discovery tags -------------------------------------------
+
+    def sod_tags(self):
+        """The full SoD tagging result for this build, computed once.
+
+        Runs sod_tags.detect() over the hotfixed CSVs, so it works without a
+        wow.db and without WTL. See scripts/sod_tags.py for the tiers and why
+        this is an annotation rather than a contamination rule.
+        """
+        if self._sod is None:
+            import sod_tags
+            self._sod = sod_tags.detect_from_csv(self.out_dir, self.build)
+        return self._sod
+
+    def sod_tag(self, spell_id):
+        """{tier, reasons, flags, live_in_forever, ...} for one spell.
+
+        `tier` None is untagged. Check `not_scanned` before reading that as
+        "not SoD": a step that could not run leaves spells untagged too.
+        sod_book_candidate and sod_flag are not proof of cut content.
+        """
+        import sod_tags
+        return sod_tags.tag_for(self.sod_tags(), spell_id)
 
     def _map_name(self, map_id):
         for variant in (HOTFIXED, PLAIN):

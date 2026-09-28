@@ -1,0 +1,11 @@
+{
+  "_comment": "Spells scripts/sod_tags.py tags as SoD content that are known to be live in Forever. An entry keeps its detected tier but gets live_in_forever=1 and is excluded from every cut view. Add an entry only with a source; never to silence a tag nobody has checked.",
+  "entries": [
+    {
+      "spell_id": 435984,
+      "reason": "folded into baseline blessings in Forever",
+      "source": "repo owner, SoD tagging brief",
+      "date": "2026-09-28"
+    }
+  ]
+}

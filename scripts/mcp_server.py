@@ -14,7 +14,7 @@ second database that would not be read-only. If the two ever disagree, the URI
 mode is the one that matters.
 
 `get_conventions` exists because the MCP client cannot see
-`.claude/skills/wow-query/SKILL.md`. That file holds eight rules, each derived
+`.claude/skills/wow-query/SKILL.md`. That file holds nine rules, each derived
 from a measurement where ignoring it produced a confident wrong answer --
 resolving foreign keys by value and picking up numeric collisions, missing
 array-suffixed FK columns, asserting a meaning for an unverified column,
@@ -298,7 +298,7 @@ def query(sql: str) -> str:
 
 
 @server.tool(
-    description=("The eight rules for querying this data correctly, verbatim "
+    description=("The nine rules for querying this data correctly, verbatim "
                  "from the repo's wow-query skill. Each was derived from a "
                  "measurement where ignoring it produced a confident wrong "
                  "answer. Call this before interpreting any result -- the rules "
