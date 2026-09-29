@@ -371,6 +371,29 @@ them.
 Returns the file bytes as `application/octet-stream`, 404 if
 `!CASC.FileExists(fileDataID)` or the read returns null.
 
+`build=` does reach a build that is not loaded: measured 2026-09-29 with
+70058 loaded, `build=1.60.1.70009` returned 70009's bytes for all 10 FrameXML
+files that differ between the two.
+
+### Content diff between builds — `GET /casc/diff` ✅ measured
+
+| Param | Type | Default |
+|---|---|---|
+| `from` | string | — full version |
+| `to` | string | — full version |
+| `type` | string | `normal` — compare via manifests; anything else loads both builds' root + encoding |
+
+Returns `{added, modified, removed, data}` where each `data` entry is
+`{id, action, encryptedStatus, type, md5, filename}` and `action` is
+`Added` / `Removed` / `Modified`. Comparison is by content key per FDID, so it
+catches files **rewritten under an unchanged FDID**, which `files.csv` cannot.
+DB2s are special-cased: their first 136 bytes (header, which embeds the build)
+are ignored, so a DB2 counts as modified only when its data moved. Results are
+cached in memory (`BuildDiffCache`) until a build switch. Measured 70009 ->
+70058: 79 modified (52 `bls`, 17 `dll`, 9 `lua`, 1 `xml`), 0 added/removed,
+about a minute cold. `md5` is the **to** side's key only. `diff_builds.py`
+calls this and caches it as `out/<to>/content_diff_<from>.json`.
+
 ### File detail — `GET /casc/moreinfo` ✅ measured
 
 | Param | Type |

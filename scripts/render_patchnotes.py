@@ -569,6 +569,8 @@ def build_diff_model(from_build, to_build, e, manifest):
         "all_changed_unverified": bool(changed_cols) and changed_cols == unverified_cols,
         "schema_changed": sorted(t for t, r in results.items() if r["schema_changed"]),
         "files": diff_builds.diff_files(old_dir, new_dir),
+        # Reads diff_builds.py's cache when it exists; asks WTL otherwise.
+        "contents": diff_builds.diff_contents(from_build, to_build),
         "gametables": diff_builds.diff_gametables(old_dir, new_dir),
         "contamination": run_contamination_results(e, results),
         "sections": [],
@@ -655,6 +657,7 @@ summary{cursor:pointer;padding:11px 16px;font-size:14px;color:var(--ink-dim);use
 summary:hover{background:var(--panel-2);color:var(--ink)}
 details[open] summary{border-bottom:1px solid var(--line)}
 .details-body{padding:4px 16px 14px;overflow-x:auto}
+pre{margin:0;padding:12px 16px;overflow-x:auto;white-space:pre;line-height:1.45;color:var(--ink)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin:12px 0}
 .item{display:flex;gap:10px;align-items:center;background:var(--panel);
   border:1px solid var(--line);border-radius:6px;padding:8px 10px}
@@ -1060,18 +1063,32 @@ def render_build_diff(m, e):
     pct = (100.0 * unchanged / m["table_count"]) if m["table_count"] else 0
     L.append('<h2 id="headline">Headline</h2>')
 
-    if changed == 0:
+    cd = m.get("contents") or {"status": "unavailable", "reason": "not requested"}
+    cd_ok = cd["status"] != "unavailable"
+    n_mod = len(cd["modified"]) if cd_ok else 0
+    if changed == 0 and cd_ok and n_mod:
+        L.append('<div class="banner warn"><h4>No data changed, but '
+                 f"{n_mod:,} file(s) were rewritten</h4>"
+                 f"<p>All {m['table_count']:,} shipped tables are byte-identical, yet "
+                 "these files changed content under unchanged FileDataIDs: "
+                 + esc(", ".join(f"{t} {n}" for t, n in diff_builds.content_type_counts(cd["modified"])))
+                 + ". This is a client-code build. See <a href='#contents'>File contents</a>.</p></div>")
+    elif changed == 0:
+        tail = ("" if cd_ok else
+                " File contents were <strong>not measured</strong>, so this covers data only.")
         L.append('<div class="banner good"><h4>Nothing changed</h4>'
                  f"<p>All {m['table_count']:,} shipped tables are byte-identical "
-                 "between these two builds.</p></div>")
+                 f"between these two builds.{tail}</p></div>")
     else:
         L.append('<div class="banner good">')
         L.append(f"<h4>{changed} of {m['table_count']:,} tables changed "
                  f"({pct:.1f}% byte-identical)</h4>")
         L.append("<p>This is a small diff, and that is the result rather than a "
                  "gap in the extraction — every other shipped table is identical "
-                 "byte for byte. A build that moves this little is a config "
-                 "respin, not a content patch.</p>")
+                 "byte for byte."
+                 + (f" {n_mod:,} file(s) also changed content; see "
+                    "<a href='#contents'>File contents</a>." if n_mod else "")
+                 + "</p>")
         L.append("<p class='mono'>"
                  + ", ".join(esc(t) for t in sorted(m["results"])) + "</p>")
         L.append("</div>")
@@ -1147,6 +1164,8 @@ def render_build_diff(m, e):
                      "total included — could not have changed either. A match is "
                      "not a measurement here.</div>")
 
+    L.append(render_contents(cd))
+
     # --- gametables --------------------------------------------------------
     L.append('<h2 id="gametables">GameTables</h2>')
     gt = m["gametables"]
@@ -1185,6 +1204,49 @@ def render_build_diff(m, e):
              "<code>scripts/render_patchnotes.py</code>.</footer>")
     L.append("</div></body></html>")
     return "\n".join(x for x in L if x)
+
+
+def render_contents(cd):
+    """Files rewritten under an unchanged FDID -- invisible to files.csv."""
+    L = ['<h2 id="contents">File contents</h2>']
+    if cd["status"] == "unavailable":
+        L.append('<div class="banner warn"><h4>Not measured</h4>'
+                 f"<p>{esc(cd['reason'])}. <code>files.csv</code> has no content hash, "
+                 "so a file rewritten under an unchanged FileDataID is invisible to "
+                 "every other section of this page. This is a gap, not a clean "
+                 "result.</p></div>")
+        return "\n".join(L)
+    mod = cd["modified"]
+    L.append('<div class="stats">')
+    for k, v in (("Modified", len(mod)), ("Added", len(cd["added"])),
+                 ("Removed", len(cd["removed"]))):
+        L.append(f'<div class="stat"><div class="v">{v:,}</div>'
+                 f'<div class="k">{esc(k)}</div></div>')
+    L.append("</div>")
+    if not mod:
+        L.append("<p class='sub'>No file's content changed.</p>")
+        return "\n".join(L)
+    L.append("<p class='sub'>By CASC content key (WTL <code>/casc/diff</code>). "
+             + esc(", ".join(f"{t} {n:,}" for t, n in diff_builds.content_type_counts(mod)))
+             + "</p>")
+    by_id = {str(e["fdid"]): e for e in mod}
+    for fdid, d in (cd.get("text_diffs") or {}).items():
+        name = by_id.get(fdid, {}).get("filename") or fdid
+        L.append(f"<details><summary class='mono'>{esc(name)}</summary>")
+        if d.get("error"):
+            L.append(f"<p class='dim'>{esc(d['error'])}</p>")
+        else:
+            L.append("<pre class='mono'>" + esc(d.get("diff") or "(no textual difference)") + "</pre>")
+        L.append("</details>")
+    rest = [e for e in mod if str(e["fdid"]) not in (cd.get("text_diffs") or {})]
+    if rest:
+        L.append(f"<details><summary>{len(rest):,} other modified file(s)</summary>"
+                 "<table><thead><tr><th>FDID</th><th>Type</th><th>Path</th></tr></thead><tbody>")
+        for e in rest:
+            L.append(f"<tr><td class='mono'>{e['fdid']}</td><td>{esc(e['type'])}</td>"
+                     f"<td class='mono'>{esc(e['filename'] or '(unnamed)')}</td></tr>")
+        L.append("</tbody></table></details>")
+    return "\n".join(L)
 
 
 def render_build_table(t, r, e):

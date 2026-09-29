@@ -38,8 +38,8 @@ Outstanding:
       shaders, 17 DLLs, and 10 gamepad FrameXML files (world-map crosshair
       coords, gamepad-aware map highlights and labels, tooltip nil-guard).
       **`inventory.py` cannot see content-only changes**, because
-      `files.csv` has no content hash. Run `/casc/diff?from=&to=` on every
-      build. The overlay was measured the same day: new pushes 112262
+      `files.csv` has no content hash. `diff_builds.py` now runs
+      `/casc/diff` itself (see step 9 of the patch-day checklist). The overlay was measured the same day: new pushes 112262
       (weather/rain particulates), 112263 (Night Watchman's Torch), 112264
       (spam filters), 112271. See `reports/patchday_1.60.1.70058.md`.
 
@@ -1709,7 +1709,12 @@ regions but `cn` can lag or diverge.
    then `build_db.py` (in that order — GameTable discovery reads
    `files.csv`, and the database loads all three). `patchday.py` step 8
    does all four.
-9. Diff against the previous Forever build.
+9. Diff against the previous Forever build. **WTL must still be running**:
+   `diff_builds.py` compares CASC content keys through `/casc/diff` and
+   diffs changed Lua/XML/TOC files. That is the only check that sees a file
+   rewritten under an unchanged FDID (70058 was nothing else). It caches to
+   `out/<to>/content_diff_<from>.json`, which `render_patchnotes.py` reads.
+   With WTL down and no cache, both reports say **not measured**.
 10. Commit `builds.json` and the new report.
 
 ### Hotfix-only day (downtime with no new build)

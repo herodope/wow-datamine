@@ -16,6 +16,14 @@ Also diffs `files.csv` for added/removed/retyped files and reports the
 encrypted-file count broken out by status. **A fall in EncryptedUnknownKey is
 the key-leak signal** -- content that was locked has become readable.
 
+`files.csv` carries no content hash, so it cannot see a file whose bytes change
+under an unchanged FDID. 1.60.1.70058 did exactly that: every DB2 identical, the
+file set unchanged, and 79 files (FrameXML, shaders, DLLs) rewritten. The
+content check asks WTL's `/casc/diff` to compare content keys, fetches both
+sides of every changed text file (Lua, XML, TOC) for a unified diff, and caches
+the result as out/<to>/content_diff_<from>.json so the report can be rebuilt
+with WTL stopped. With neither WTL nor a cache it reports NOT MEASURED, never 0.
+
 Output: reports/<from>_to_<to>.md, high-signal tables in full, everything else
 collapsed.
 
@@ -23,13 +31,18 @@ Usage:
     python scripts/diff_builds.py 1.60.1.69913 1.60.2.70050
     python scripts/diff_builds.py <from> <to> --max-rows 40
     python scripts/diff_builds.py <from> <to> --allow-non-forever
+    python scripts/diff_builds.py <from> <to> --refresh-contents   # ignore the cache
 """
 
 import argparse
 import csv
+import difflib
 import hashlib
 import json
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, timezone
 
 import config
@@ -44,6 +57,15 @@ csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 HIGH_SIGNAL = ["Spell", "Item", "Creature", "QuestV2", "Map", "AreaTable"]
 
 ENCRYPTION_STATUSES = ["EncryptedUnknownKey", "EncryptedKnownKey", "EncryptedMixed", "EncryptedButNot"]
+
+# Content types whose changes are worth reading line by line. Everything else
+# modified is counted and listed, not diffed.
+CONTENT_TEXT_TYPES = {"lua", "xml", "toc"}
+CONTENT_MAX_TEXT_FILES = 60
+CONTENT_MAX_DIFF_LINES = 400
+# /casc/diff took about a minute on 70009 -> 70058, cold.
+CONTENT_DIFF_TIMEOUT = 1800
+CONTENT_FETCH_TIMEOUT = 120
 
 
 def log(msg):
@@ -248,6 +270,100 @@ def diff_files(old_dir, new_dir):
         "enc_old": enc_counts(old), "enc_new": enc_counts(new),
         "old_map": old, "new_map": new,
     }
+
+
+def content_cache_path(from_build, to_build):
+    return config.build_out_dir(to_build) / f"content_diff_{from_build}.json"
+
+
+def _wtl_get(path, params, timeout):
+    """(status, body). status None means WTL did not answer at all."""
+    url = config.WTL_URL + path + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": "wow-datamine/1.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read()
+    except (urllib.error.URLError, OSError):
+        return None, None
+
+
+def _text_diff(fdid, name, from_build, to_build):
+    """Unified diff of one text file across two builds, or an error string."""
+    sides = []
+    for b in (from_build, to_build):
+        status, body = _wtl_get("/casc/fdid", {"fileDataID": fdid, "build": b}, CONTENT_FETCH_TIMEOUT)
+        if status != 200 or body is None:
+            return None, f"could not fetch from {b} (HTTP {status})"
+        sides.append(body.decode("utf-8-sig", errors="replace").splitlines())
+    lines = list(difflib.unified_diff(sides[0], sides[1], f"{from_build}/{name}", f"{to_build}/{name}", lineterm=""))
+    if len(lines) > CONTENT_MAX_DIFF_LINES:
+        lines = lines[:CONTENT_MAX_DIFF_LINES] + [f"... {len(lines) - CONTENT_MAX_DIFF_LINES:,} more line(s)"]
+    return "\n".join(lines), None
+
+
+def diff_contents(from_build, to_build, refresh=False):
+    """Files whose bytes changed between two builds, by CASC content key.
+
+    Returns {"status": "measured"|"cached"|"unavailable", ...}. "unavailable"
+    carries a reason and no counts: an unmeasured zero is not a result.
+    """
+    cache = content_cache_path(from_build, to_build)
+    if cache.exists() and not refresh:
+        try:
+            data = json.loads(cache.read_text(encoding="utf-8"))
+            data["status"] = "cached"
+            return data
+        except (OSError, json.JSONDecodeError) as exc:
+            log(f"  content cache {cache.name} unreadable ({exc}); re-measuring")
+
+    status, body = _wtl_get("/casc/diff", {"from": from_build, "to": to_build}, CONTENT_DIFF_TIMEOUT)
+    if status is None:
+        why = ("--refresh-contents skipped the cache" if cache.exists()
+               else "no cached result exists")
+        return {"status": "unavailable",
+                "reason": f"WTL is not reachable at {config.WTL_URL} and {why}"}
+    if status != 200:
+        # A 500 here is usually a build WTL has no manifest for, not a dead server.
+        return {"status": "unavailable",
+                "reason": f"/casc/diff answered HTTP {status}: "
+                          + body.decode("utf-8", errors="replace").strip()[:200]}
+    raw = json.loads(body)
+
+    entries = {"Added": [], "Removed": [], "Modified": []}
+    for e in raw.get("data", []):
+        entries.setdefault(e.get("action"), []).append({
+            "fdid": e.get("id"), "type": e.get("type") or "unk",
+            "filename": e.get("filename") or "", "encrypted": e.get("encryptedStatus"),
+        })
+    for v in entries.values():
+        v.sort(key=lambda x: (x["type"], x["filename"], x["fdid"] or 0))
+
+    text = [e for e in entries["Modified"] if e["type"] in CONTENT_TEXT_TYPES]
+    text_diffs = {}
+    for e in text[:CONTENT_MAX_TEXT_FILES]:
+        diff, err = _text_diff(e["fdid"], e["filename"] or str(e["fdid"]), from_build, to_build)
+        text_diffs[str(e["fdid"])] = {"diff": diff, "error": err}
+    skipped = max(0, len(text) - CONTENT_MAX_TEXT_FILES)
+
+    data = {
+        "from_build": from_build, "to_build": to_build,
+        "measured_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "added": entries["Added"], "removed": entries["Removed"], "modified": entries["Modified"],
+        "text_diffs": text_diffs, "text_diffs_skipped": skipped,
+    }
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(data, indent=1), encoding="utf-8")
+    data["status"] = "measured"
+    return data
+
+
+def content_type_counts(entries):
+    c = {}
+    for e in entries:
+        c[e["type"]] = c.get(e["type"], 0) + 1
+    return sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))
 
 
 # --- Report -----------------------------------------------------------------
@@ -544,7 +660,70 @@ def render_table_section(r, max_rows):
     return L
 
 
-def render(old_build, new_build, results, findings, fd, unchanged_count, max_rows, gt=None, coverage=None):
+def render_contents(cd):
+    L = ["## File contents", ""]
+    if cd is None:
+        return L + ["Not requested (`--no-contents`). **Not measured** -- not a clean result.", "", "---", ""]
+    if cd["status"] == "unavailable":
+        L += [
+            "**NOT MEASURED -- this is not a clean result.**",
+            "",
+            f"{cd['reason']}. `files.csv` has no content hash, so a file rewritten under an "
+            "unchanged FDID is invisible everywhere else in this report. Re-run with WTL up.",
+            "", "---", "",
+        ]
+        return L
+
+    mod, add, rem = cd["modified"], cd["added"], cd["removed"]
+    src = "read from cache" if cd["status"] == "cached" else "live"
+    L.append(f"By CASC content key, via WTL `/casc/diff` ({src}; measured {cd['measured_at']}).")
+    L.append("")
+    L.append("| | |")
+    L.append("|---|--:|")
+    L.append(f"| Modified | {len(mod):,} |")
+    L.append(f"| Added | {len(add):,} |")
+    L.append(f"| Removed | {len(rem):,} |")
+    L.append("")
+    if not (mod or add or rem):
+        L += ["No file's content changed between these builds.", "", "---", ""]
+        return L
+
+    if mod:
+        L.append("Modified, by type: " + ", ".join(f"`{t}` {n:,}" for t, n in content_type_counts(mod)))
+        L.append("")
+        L.append("| FDID | Type | Path |")
+        L.append("|---|---|---|")
+        # Text files first: they are the readable part.
+        shown = sorted(mod, key=lambda e: (e["type"] not in CONTENT_TEXT_TYPES, e["type"], e["filename"]))
+        for e in shown[:80]:
+            L.append(f"| `{e['fdid']}` | `{e['type']}` | {trunc(e['filename'] or '(unnamed)')} |")
+        if len(shown) > 80:
+            L.append(f"| … | | *{len(shown) - 80:,} more* |")
+        L.append("")
+
+    diffs = cd.get("text_diffs") or {}
+    if diffs:
+        L.append(f"### Text diffs ({len(diffs)})")
+        L.append("")
+        by_id = {str(e["fdid"]): e for e in mod}
+        for fdid, d in diffs.items():
+            name = by_id.get(fdid, {}).get("filename") or fdid
+            L.append(f"<details><summary><code>{name}</code></summary>")
+            L.append("")
+            if d.get("error"):
+                L.append(f"*{d['error']}*")
+            else:
+                L += ["```diff", d.get("diff") or "(no textual difference; likely line endings or encoding)", "```"]
+            L += ["", "</details>", ""]
+        if cd.get("text_diffs_skipped"):
+            L.append(f"{cd['text_diffs_skipped']:,} further text file(s) changed and were not diffed "
+                     f"(cap {CONTENT_MAX_TEXT_FILES}).")
+            L.append("")
+    L += ["---", ""]
+    return L
+
+
+def render(old_build, new_build, results, findings, fd, unchanged_count, max_rows, gt=None, coverage=None, cd=None):
     L = []
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     high = [r for r in results if r["table"] in HIGH_SIGNAL]
@@ -569,12 +748,17 @@ def render(old_build, new_build, results, findings, fd, unchanged_count, max_row
     L.append(f"| Rows changed | {sum(len(r['changed']) for r in results):,} |")
     L.append(f"| New tables | {sum(1 for r in results if r['only_in'] == 'new'):,} |")
     L.append(f"| Removed tables | {sum(1 for r in results if r['only_in'] == 'old'):,} |")
+    if cd is not None and cd["status"] != "unavailable":
+        L.append(f"| Files with changed content | {len(cd['modified']):,} |")
+    else:
+        L.append("| Files with changed content | **not measured** |")
     L.append("")
     L.append("---")
     L.append("")
 
     L += render_encryption(fd)
     L += render_files(fd)
+    L += render_contents(cd)
     L += render_gametables(gt)
     L += render_schema_changes(results)
     L += contamination.render_markdown(findings, coverage)
@@ -639,6 +823,9 @@ def main(argv=None):
     ap.add_argument("--detail", action="append", default=[], help="also render this table in full")
     ap.add_argument("--no-contamination", action="store_true")
     ap.add_argument("--allow-non-forever", action="store_true")
+    ap.add_argument("--refresh-contents", action="store_true",
+                    help="re-query /casc/diff instead of using out/<to>/content_diff_<from>.json")
+    ap.add_argument("--no-contents", action="store_true", help="skip the content-key check")
     args = ap.parse_args(argv)
 
     for b in (args.from_build, args.to_build):
@@ -725,6 +912,18 @@ def main(argv=None):
     if "unavailable" not in fd:
         log(f"  files: +{len(fd['added']):,} -{len(fd['removed']):,} retyped {len(fd['retyped']):,}")
 
+    cd = None
+    if not args.no_contents:
+        log("  contents: comparing CASC content keys via /casc/diff ...")
+        cd = diff_contents(args.from_build, args.to_build, refresh=args.refresh_contents)
+        if cd["status"] == "unavailable":
+            log(f"  contents: NOT MEASURED -- {cd['reason']}")
+        else:
+            kinds = ", ".join(f"{t} {n}" for t, n in content_type_counts(cd["modified"]))
+            log(f"  contents ({cd['status']}): {len(cd['modified']):,} modified"
+                + (f" [{kinds}]" if kinds else "")
+                + f", {len(cd['text_diffs']):,} text diff(s)")
+
     gt = diff_gametables(old_dir, new_dir)
     if gt is None:
         log("  gametables: NOT EXTRACTED for one or both builds -- run extract_gametables.py")
@@ -734,7 +933,7 @@ def main(argv=None):
 
     config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     path = config.report_path(args.from_build, args.to_build)
-    path.write_text(render(args.from_build, args.to_build, results, findings, fd, unchanged, args.max_rows, gt, coverage), encoding="utf-8")
+    path.write_text(render(args.from_build, args.to_build, results, findings, fd, unchanged, args.max_rows, gt, coverage, cd), encoding="utf-8")
     log("")
     log(f"  -> {path}")
     return 0
