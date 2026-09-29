@@ -32,6 +32,16 @@ Outstanding:
       `.tmp` session buffer is never read. The overlay has 11 tables and
       only **2 real pushes**. See **Hotfixes are per build** under **Key
       facts**.
+- [x] **1.60.1.70058 (2026-09-29) is a client-code build.** All 610 shipped
+      DB2s are byte-identical to 70009, and the FDID set and encryption did
+      not move. `/casc/diff` found 79 files whose **content** changed: 52
+      shaders, 17 DLLs, and 10 gamepad FrameXML files (world-map crosshair
+      coords, gamepad-aware map highlights and labels, tooltip nil-guard).
+      **`inventory.py` cannot see content-only changes**, because
+      `files.csv` has no content hash. Run `/casc/diff?from=&to=` on every
+      build. The overlay was measured the same day: new pushes 112262
+      (weather/rain particulates), 112263 (Night Watchman's Torch), 112264
+      (spam filters), 112271. See `reports/patchday_1.60.1.70058.md`.
 
 ---
 
@@ -60,6 +70,7 @@ bound when looking for builds — it is a press date, not a data date.
 | 1.60.1 | 69913 | 2026-09-18 03:02 | `6c0df97e8e481a9a41600e373367c200` | `5525ea1ce6668e895569c89c2d6a154c` |
 | 1.60.1 | 69977 | 2026-09-23 (captured) | `3bd89ce2721f7c75e7525dc83741076f` | `ed440cc894be6d92a02f076fa00ce2f5` |
 | 1.60.1 | 70009 | 2026-09-24 (captured) | `05215079e3905ef5922ae0b03ffefb73` | `9b3c456dbb837d133a026d380c7c13e9` |
+| 1.60.1 | 70058 | 2026-09-29 (captured) | `8f8ffb0634e955e8ff585ebaf9727509` | `a9028f7cf71de20b3915a042b23afd83` |
 
 These hashes are the only way to reach a build after Blizzard rotates it off the
 live version list. Capture them every patch day, before anything else.
