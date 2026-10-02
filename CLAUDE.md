@@ -583,7 +583,7 @@ the weaker tier.
 
 | Tier | Meaning | Cut view? | 70009 | 70170 |
 |---|---|---|--:|--:|
-| `sod_rune` | full engraving chain | yes | 829 | 828 |
+| `sod_rune` | full engraving chain (unless `live_in_forever`) | yes | 829 | 828 |
 | `sod_book_candidate` | taught by a learn item with no `ItemSparse` row. Not proof | yes | 20 | 20 |
 | `sod_ported` | SoD ability whose same-name trainer sibling is absent from the SoD-era client, so Forever re-added it | no | 23 | 24 |
 | `sod_variant` | SoD ID of a spell whose base version is an untagged trainer spell | no | 94 | 94 |
@@ -701,6 +701,14 @@ after detection:
 - `sod_manual.json` adds a `tier` field. Its tags carry `source_rule =
   'manual'` and never override a detected tag; a clash is reported instead.
 
+`live_in_forever` is also set **structurally**, after the allowlist. The new
+`live_source` column says which route set it: `allowlist`, `trait_tree` (a
+live talent tree grants the spell) or `forever_trainer` (Forever added or
+changed its trainer row relative to the SoD reference). Steps 6 and 7,
+`trait_tree` and `forever_trainer`, tag nothing. They collect the evidence
+that `detect()` applies. See **Player reachability** under *Reporting gap and
+liveness*.
+
 **Coverage.** `sod_tags_coverage` records per step whether its source tables
 exist and are non-empty in the build (rule 7 of the skill). A step that could
 not run reads **NOT SCANNED** in the report and in the table, never zero.
@@ -797,14 +805,13 @@ extracted 15 tables, and `wow.db` there loads only `SpellName`. There is no
 `ItemSparse` or `ItemEffect`, so "was this item in the SoD client?" cannot be
 asked.
 
-**Planned changes. None are implemented yet.**
-1. Add `player_reachable` and `reach_root` to `wow.db`, as a `spell_reach`
-   table built beside `sod_tags`, using the third root set above plus
-   second-hop SoD-item exclusion.
-2. In `sod_tags.py`, set `live_in_forever = 1` structurally when a tagged
-   spell is a node on a `SkillLineXTraitTree`-linked tree, with
-   `source_rule = 'trait_tree'`. Today that only happens through
-   `sod_allowlist.json`.
+**Changes.** Items 1, 2 and 5 were built on 2026-10-02 (see **Player
+reachability** below), plus a rule found while verifying them
+(`forever_trainer`). Items 3, 4 and 6 are still open.
+1. **Done.** `spell_reach` in `wow.db`, from `scripts/spell_reach.py`.
+2. **Done.** `sod_tags.py` sets `live_in_forever = 1` structurally for a
+   tagged spell on a live talent tree, with `live_source = 'trait_tree'`
+   (a new column). The tier and `source_rule` are kept.
 3. Add a weak `sod_clone` tier: an untagged spell that shares its
    `Name_lang` with a tagged rune, book or variant, is unreachable, and
    (optionally) has a description that references a missing spell. Do not
@@ -812,14 +819,85 @@ asked.
 4. Tag SoD items, not just spells: items whose `ItemEffect` spell, or
    anything that spell triggers, is tagged. Materialise them as
    `sod_item_tags`.
-5. Make `diff_builds.py` and `render_patchnotes.py` partition spell changes
-   into three groups: **player-facing**, **SoD-tagged**, and **unreachable /
-   server-side**. Only the first belongs in the headline.
+5. **Done.** `diff_builds.py` and `render_patchnotes.py` partition spell
+   changes into **player-facing**, **Season of Discovery (cut tiers)** and
+   **unreachable / server-side**, ahead of the per-table detail.
 6. Re-extract 1.15.9.69722 with `ItemSparse`, `ItemEffect`,
    `ItemXItemEffect` and `SpellEffect`.
 
-The prototype script is not committed. It ran from the session scratchpad;
-the numbers above are its output on 70170.
+The numbers above came from a scratchpad prototype. The committed module
+differs slightly: its counts are in the next section.
+
+### Player reachability (`spell_reach`), built 2026-10-02
+
+`scripts/spell_reach.py` answers "can a player get this spell?". `build_db.py`
+runs it after `sod_tags` and materialises **`spell_reach`**: one row per
+`SpellName` ID with `reachable`, `root_kind`, `root_id`, `root_spell`,
+`via_spell`, `via_edge` and `depth`. An absent row means "not a spell in this
+build", never "not examined". **`spell_reach_coverage`** records which root
+sources could be read, and `_build_info.spell_reach` records `ok` or the
+error.
+
+- **Roots:**
+  - `skill_line`: AcquireMethod 0/1/2, excluding 2851 Engraving.
+  - `talent_tree`: `TraitDefinition` SpellID/VisibleSpellID on a live tree.
+  - `talent`: `Talent.SpellRank_0..8`. `SpellID` is 0 on all 432 rows.
+  - `item`: an `ItemSparse` item that is not a SoD item.
+- **Edges:** trigger, enchant and aura-332 override.
+- **Live trees** (`spell_reach.live_trait_trees`, shared with `sod_tags`): a
+  tree is live if `SkillLineXTraitTree` links it, or if its TraitSystem is one
+  no linked tree uses. At 70170 that is the 9 class trees plus the Legacy
+  trees 1187/1188/1189, which `LegacyConsts` in the client's API
+  documentation names. Tree 1118 also counts: it is on the Legacy system 45
+  but has no nodes. Trees 1058, 1066, 1081 and 1083 do not count.
+- **SoD items** are excluded as roots when their effect spell, or anything it
+  reaches, is tagged `sod_rune`/`sod_book_candidate`/`sod_flag` and not live.
+  322 at 70170, including the second-hop scrambled Spell Notes.
+- **Measured at 70170:** 9,070 of 31,744 spells reachable from 9,539 roots.
+- **`spell_reach.load(build)`** computes reachability on the fly, read-only,
+  for a database built before the table existed. That is how 70058 is read
+  while `mcp_server.py` holds its `wow.db` open (WinError 5; a stale
+  `wow.db.tmp` is left beside it). It also applies the talent-tree rescue to
+  that database's older `sod_tags`. It does **not** apply `forever_trainer`
+  there, so a removed spell in such a build can still show as SoD.
+- **`scripts/test_spell_reach.py`** pins the measured IDs.
+
+**`forever_trainer`**, a `sod_tags` step found while verifying the above:
+- **The finding.** The regenerated 70170 notes put Fire Nova 408341–408345
+  under SoD. Forever deleted Fire Nova Totem (1535/11315 are gone from
+  `SpellName`) and made the SoD rune Fire Nova the Shaman trainer spell:
+  AcquireMethod 0 on 375 Elemental Combat, Ranks 1–5 at levels 12–52. In
+  1.15.9 the same IDs were AcquireMethod 3 on 373 Enhancement.
+- **The rule.** A tagged spell with a trainer row (AcquireMethod 0,
+  non-Engraving, with `SpellLevels`) that the SoD reference's
+  `SkillLineAbility` lacks is marked `live_in_forever` with
+  `live_source = 'forever_trainer'`.
+- **Not evidence:** a row identical to SoD's. Aspect of the Viper 415423,
+  Shadowfiend 401977, Redirect 438040, Totemic Projection 437009 and Heart of
+  the Lion 409580 carry the same AcquireMethod-0 row in 1.15.9, so they stay
+  cut.
+- **Result at 70170:** 12 spells qualify. 7 are runes (Fire Nova ×5, Victory
+  Rush 402927, Hammer of the Righteous 407632). The other 5 are already
+  `sod_ported`, Mutilate 399956 among them, so the two rules agree
+  independently.
+- `load_reference_sla()` reads the reference's `SkillLineAbility.csv`.
+  Without it the step reads **NOT SCANNED**.
+
+**Totals at 70170:** `trait_tree` marks 38 tagged spells live (27
+`sod_rune`, 8 `sod_ported`, 2 `sod_book_candidate`, 1 `sod_flag`), and
+`forever_trainer` marks 12 more.
+
+**The regenerated 70058 → 70170 notes:** 1,018 spells touched by `Spell*`
+tables. 494 are player-facing, 0 are SoD, and 524 are unreachable. Every spell
+the first summary misreported lands in the unreachable group: Starfall
+1300361, Renew 1289450, Soul Harvest 1242853, Coward! 422978, Totemic Recall
+1323420 and others.
+
+**Still wrong in the same direction:**
+- `ItemSparse` carries test and GM items, so their spells read as
+  player-facing. Area Death (TEST) 265 is reachable via item 5417.
+- Cryoblast 440212 is player-facing only through Scroll of Cryoblast 217495,
+  which has a SoD-era ID. Item 6 above is what would settle it.
 
 ---
 
@@ -1430,6 +1508,8 @@ apply to the libraries.
 │   ├── enrich.py            # ID -> human-readable context, for the reports
 │   ├── sod_tags.py          # SoD annotation -> sod_tags in wow.db; NOT contamination
 │   ├── test_sod_tags.py     # pins the measured SoD IDs (stdlib unittest)
+│   ├── spell_reach.py       # player reachability -> spell_reach in wow.db; patch-note partition
+│   ├── test_spell_reach.py  # pins the measured reachability IDs (stdlib unittest)
 │   ├── build_db.py          # CSVs -> out/<build>/wow.db, one queryable file
 │   ├── query.py             # read-only SQL CLI over wow.db
 │   ├── mcp_server.py        # same database over MCP stdio, read-only
@@ -1492,9 +1572,10 @@ Two details worth knowing before querying:
   mis-sniff degrades safely — SQLite stores a value that will not convert
   as-is.
 
-Two derived tables follow the load: `sod_tags` and `sod_tags_coverage` (see
-**Season of Discovery tags**). They are computed from the live tables and
-annotate only.
+Four derived tables follow the load: `sod_tags` and `sod_tags_coverage` (see
+**Season of Discovery tags**), then `spell_reach` and `spell_reach_coverage`
+(see **Player reachability** there). They are computed from the live tables
+and annotate only.
 
 At 1.60.1.69913: 1,263 tables, 3,844,494 rows, 4,210 indexes, ~317 MB, ~20s.
 69876 and 69893 load 1,262 — they have no `TimeEventData`, which exists only

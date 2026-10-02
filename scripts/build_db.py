@@ -12,10 +12,13 @@ Three sets of tables land in one database:
     plain_<Table>    from db2/           -- as shipped in the client
     gt_<Name>        from gametables/    -- tab-separated, not DB2s
 
-Two derived tables are added after the load, by `sod_tags.py`:
+Four derived tables are added after the load, by `sod_tags.py` and
+`spell_reach.py`:
 
     sod_tags          one row per spell tagged as Season of Discovery content
     sod_tags_coverage which detection steps could run on this build
+    spell_reach       one row per spell: can a player get it, and from where
+    spell_reach_coverage which root sources could be read on this build
 
 They annotate; they never filter. A query excludes SoD content only if it
 joins `sod_tags`.
@@ -62,6 +65,7 @@ from datetime import datetime, timezone
 
 import config
 import sod_tags
+import spell_reach
 
 csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
 
@@ -297,6 +301,30 @@ def main(argv=None):
     except Exception as exc:                          # noqa: BLE001 - log, don't crash
         sod = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
         log(f"  !! sod_tags FAILED, tables not written: {sod['error']}")
+        result = None
+
+    # Player reachability: can a player get this spell at all? Uses the SoD
+    # tags just computed to exclude SoD rune / Spell Notes items as roots.
+    # Same failure policy: loud, recorded, never fatal to the database.
+    reach = {"status": "skipped"}
+    try:
+        tags = ({s: (r["tier"], bool(r["live_in_forever"])) for s, r in result["tags"].items()}
+                if result is not None else None)
+        rres = spell_reach.compute(conn, tags, build)
+        with conn:
+            spell_reach.materialize(conn, rres, build)
+        reach = {"status": "ok", **{k: v for k, v in rres["stats"].items()
+                                     if k in ("spells", "roots", "reachable", "sod_items_excluded",
+                                              "live_trait_trees")},
+                 "not_scanned": [c["root"] for c in rres["coverage"] if c["status"] != "scanned"]}
+        if tags is None:
+            reach["not_scanned"].append("sod_item_exclusion")
+        log(f"  spell_reach: {reach['reachable']:,} of {reach['spells']:,} spells reachable, "
+            f"{reach.get('sod_items_excluded', 0)} SoD item(s) excluded"
+            + (f"; NOT SCANNED: {', '.join(reach['not_scanned'])}" if reach["not_scanned"] else ""))
+    except Exception as exc:                          # noqa: BLE001 - log, don't crash
+        reach = {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+        log(f"  !! spell_reach FAILED, tables not written: {reach['error']}")
 
     # A database that cannot say what it is gets mistaken for another build.
     with conn:
@@ -309,6 +337,7 @@ def main(argv=None):
              ("tables", str(len(loaded))),
              ("skipped_empty", str(len(skipped))),
              ("sod_tags", json.dumps(sod)),
+             ("spell_reach", json.dumps(reach)),
              ("note", "unprefixed = db2_hotfixed (live); plain_ = db2 (as shipped); "
                       "gt_ = GameTables (tab-separated, not DB2s)")])
 
@@ -337,6 +366,7 @@ def main(argv=None):
         },
         "row_counts": {k: v["rows"] for k, v in sorted(loaded.items())},
         "sod_tags": sod,
+        "spell_reach": reach,
     }
     mpath = out_dir / "manifest.json"
     if mpath.exists():

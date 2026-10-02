@@ -34,6 +34,23 @@ Tiers, strongest first:
 'manual') for spells no structural signal reaches; `sod_allowlist.json` marks
 detected tags live_in_forever. Both are applied after every step has run.
 
+A tag that a live Forever talent tree grants is marked live_in_forever too,
+structurally (live_source 'trait_tree'), after the allowlist. The tier is
+kept: the spell IS SoD-derived, it just is not cut. Measured at 70170: 38
+tagged spells are nodes on live trees -- 27 sod_rune, 8 sod_ported, 2
+sod_book_candidate, 1 sod_flag (Heating Up, Fingers of Frost, Maelstrom
+Weapon, Divine Aegis, Pandemic, ...). Which trees are live is
+spell_reach.live_trait_trees(), shared so the two never disagree.
+
+Likewise for a trainer row Forever added or changed (live_source
+'forever_trainer'): AcquireMethod 0 on a non-Engraving skill line, with
+SpellLevels, that the SoD reference's SkillLineAbility lacks. A row identical
+to SoD's is not evidence -- SoD runes carry them (Aspect of the Viper,
+Shadowfiend, Redirect). Measured at 70170, 12 qualify: Fire Nova
+408341-408345, Victory Rush 402927, Hammer of the Righteous 407632, and five
+spells already sod_ported (Mutilate 399956 among them), which corroborates
+that rule independently.
+
 Class attribution comes from the chain ORIGIN, not the tagged spell: the
 engrave spell for a rune chain, the taught spell for a book, the parent for a
 propagated or override edge. Each origin's class is SkillLineAbility.ClassMask
@@ -115,6 +132,7 @@ import sys
 from datetime import datetime, timezone
 
 import config
+import spell_reach
 
 RUNE, BOOK, VARIANT, FLAG = "sod_rune", "sod_book_candidate", "sod_variant", "sod_flag"
 PORTED = "sod_ported"
@@ -154,13 +172,20 @@ SHARED_REFS = (
 # Any Talent reference means a live talent, whoever else points at it.
 TALENT_REFS = ("SpellID", "OverridesSpellID", "RequiredSpellID")
 
-STEPS = ("rune_chain", "book_set", "propagation", "variant", "labels")
+STEPS = ("rune_chain", "book_set", "propagation", "variant", "labels", "trait_tree",
+         "forever_trainer")
 STEP_TABLES = {
     "rune_chain": ("SpellName", "SpellEffect", "SpellItemEnchantment"),
     "book_set": ("ItemEffect", "ItemXItemEffect", "ItemSparse", "SpellClassOptions", "Item"),
     "propagation": ("SpellEffect",),
     "variant": ("SpellName", "SpellClassOptions", "SkillLineAbility", "SpellLevels"),
     "labels": ("SpellLabel",),
+    # Not a tagging step: it finds which tagged spells live talent trees grant,
+    # and detect() marks them live_in_forever after the allowlist.
+    "trait_tree": spell_reach.ROOT_TABLES["talent_tree"],
+    # Not a tagging step either: tagged spells whose trainer row Forever
+    # added or changed relative to the SoD reference. Applied with trait_tree.
+    "forever_trainer": ("SkillLineAbility", "SpellLevels"),
 }
 # Tables whose absence weakens a step without stopping it. Recorded in
 # coverage so a thinner guard is visible rather than silent.
@@ -208,6 +233,7 @@ class _Data:
         self.conn = conn
         self.rows = _table_rows(conn)
         self.reference_build, self.reference_ids = reference or (None, set())
+        self.reference_sla = None  # {spell: {(skillline, acquire)}}; detect() fills it
 
         def have(t):
             return self.rows.get(t, 0) > 0
@@ -751,6 +777,54 @@ def _labels(data, tags, cov, stats):
     cov["note"] = f"{flagged} spell(s) flagged on label evidence alone"
 
 
+def _trait_tree(data, tags, cov, stats):
+    """Collect {spell: (tree, reason)} for spells on live talent trees.
+
+    Marks nothing here: manual tags are added after the steps run, and they
+    must be marked too. detect() applies this after the allowlist.
+    """
+    trees = spell_reach.live_trait_trees(data.conn)
+    stats["live_trait_trees"] = trees
+    stats["trait_tree_spells"] = {s: why for s, (_t, why) in
+                                  spell_reach.trait_tree_spells(data.conn, trees).items()}
+    cov["note"] = f"{len(trees)} live tree(s): {', '.join(map(str, sorted(trees)))}"
+
+
+def _forever_trainer(data, tags, cov, stats):
+    """Collect tagged spells whose trainer row is Forever's, not SoD's.
+
+    A trainer row (AcquireMethod 0 on a skill line other than Engraving, plus
+    SpellLevels) is NOT evidence on its own: SoD rune abilities carry them
+    (Aspect of the Viper 415423, Shadowfiend 401977, Redirect 438040 -- all
+    with the identical row in 1.15.9). A row that is absent from the SoD
+    reference, or differs from it, is Forever's doing. Measured at 70170:
+    Fire Nova 408341-408345 (SoD: AcquireMethod 3 on Enhancement; Forever:
+    AcquireMethod 0 on Elemental Combat, and Fire Nova Totem 1535/11315 are
+    gone from SpellName), Victory Rush 402927 (3 -> 0), Hammer of the
+    Righteous 407632 (no SoD row). Marks nothing here; detect() applies it.
+    """
+    ref = data.reference_sla
+    stats["forever_trainer_spells"] = {}
+    if ref is None:
+        cov["status"] = "not_scanned"
+        cov["missing"].append("1.15 reference SkillLineAbility")
+        cov["note"] = "NOT SCANNED: no SoD reference SkillLineAbility extracted"
+        return
+    for sid in tags.rows:
+        if sid not in data.levels:
+            continue
+        rows = [(sl, acq) for acq, sl, _cm in data.sla.get(sid, ())
+                if acq == 0 and sl != spell_reach.ENGRAVING_SKILL_LINE]
+        new = [(sl, acq) for sl, acq in rows if (sl, acq) not in ref.get(sid, set())]
+        if new:
+            was = sorted(ref.get(sid, set()))
+            stats["forever_trainer_spells"][sid] = (
+                f"trainer row SkillLine {new[0][0]} AcquireMethod 0, not in SoD reference "
+                f"{data.reference_build} (there: "
+                + (", ".join(f"SkillLine {a} AcquireMethod {b}" for a, b in was) or "no row") + ")")
+    cov["note"] = f"compared against {data.reference_build} SkillLineAbility"
+
+
 def load_allowlist(path=None):
     path = path or config.SOD_ALLOWLIST
     try:
@@ -793,6 +867,22 @@ def load_reference():
         return best[1], {int(r[i]) for r in rows if len(r) > i and r[i].isdigit()}
 
 
+def load_reference_sla(build):
+    """{spell: {(SkillLine, AcquireMethod)}} from the SoD reference's CSV, or None."""
+    if not build:
+        return None
+    for sub in ("db2_hotfixed", "db2"):
+        path = config.OUT_DIR / build / sub / "SkillLineAbility.csv"
+        if path.exists():
+            out = {}
+            with open(path, encoding="utf-8", errors="replace", newline="") as fh:
+                for r in csv.DictReader(fh):
+                    out.setdefault(_int(r.get("Spell")), set()).add(
+                        (_int(r.get("SkillLine")), _int(r.get("AcquireMethod"))))
+            return out
+    return None
+
+
 def _apply_manual(data, tags, manual, stats):
     """Hand-audited tags for spells no structural signal reaches.
 
@@ -826,10 +916,12 @@ def detect(conn, build=None, allowlist=None, manual=None, reference=None):
     target_missing, pair_base, flags, live_in_forever and allowlist_reason.
     """
     data = _Data(conn, load_reference() if reference is None else reference)
+    data.reference_sla = load_reference_sla(data.reference_build)
     tags = _Tags(data)
     stats, coverage = {}, []
     runners = {"rune_chain": _rune_chain, "book_set": _book_set,
-               "propagation": _propagate, "variant": _variants, "labels": _labels}
+               "propagation": _propagate, "variant": _variants, "labels": _labels,
+               "trait_tree": _trait_tree, "forever_trainer": _forever_trainer}
     for step in STEPS:
         cov = _coverage_entry(data, step)
         coverage.append(cov)
@@ -849,11 +941,35 @@ def detect(conn, build=None, allowlist=None, manual=None, reference=None):
             stats["allowlist_untagged"].append(sid)
             continue
         r["live_in_forever"] = True
+        r["live_source"] = "allowlist"
         r["allowlist_reason"] = entry.get("reason", "")
+
+    # Live talent trees: structural, after the allowlist so a hand entry keeps
+    # its own reason. The tier stays; the spell is SoD-derived but not cut.
+    # The same for trainer rows Forever added or changed since SoD.
+    for step, source, verb in (("trait_tree", "trait_tree", "granted by "),
+                               ("forever_trainer", "forever_trainer", "")):
+        stats[f"{step}_live"], newly = [], 0
+        for sid, why in sorted(stats.get(f"{step}_spells", {}).items()):
+            r = tags.rows.get(sid)
+            if r is None:
+                continue
+            r["reasons"].append(f"live: {verb}{why}")
+            if not r.get("live_in_forever"):
+                r["live_in_forever"] = True
+                r["live_source"] = source
+                newly += 1
+            stats[f"{step}_live"].append(sid)
+        for c in coverage:
+            if c["step"] == step and c["status"] == "scanned":
+                c["hits"] = newly
+                c["note"] += (f"; {len(stats[f'{step}_live'])} tagged spell(s) qualify, "
+                              f"{newly} newly marked live_in_forever")
 
     for r in tags.rows.values():
         r["origins"] = sorted(r["origins"])
         r.setdefault("live_in_forever", False)
+        r.setdefault("live_source", None)
         r.setdefault("allowlist_reason", None)
         if r["class"] is None:
             r["class"] = data.origin_class(r["spell_id"])
@@ -879,7 +995,8 @@ def tag_for(result, spell_id):
     return {
         "spell_id": r["spell_id"], "name": r["name"], "tier": r["tier"],
         "reasons": list(r["reasons"]), "flags": list(r["flags"]),
-        "live_in_forever": r["live_in_forever"], "source_rule": r["source_rule"],
+        "live_in_forever": r["live_in_forever"], "live_source": r["live_source"],
+        "source_rule": r["source_rule"],
         "target_missing": r["target_missing"], "pair_base": r["pair_base"],
         "forever_sibling": r["sibling"], "role": r["role"],
         "allowlist_reason": r["allowlist_reason"], "class": r["class"],
@@ -896,8 +1013,9 @@ def materialize(conn, result, build):
         reason_chain     TEXT NOT NULL,   -- JSON array, evidence in the order found
         source_rule      TEXT NOT NULL,   -- step that set the tier
         target_missing   INTEGER NOT NULL,-- 1: the ID has no SpellName row
-        live_in_forever  INTEGER NOT NULL,-- 1: allowlisted; never part of a cut view
+        live_in_forever  INTEGER NOT NULL,-- 1: live in Forever; never part of a cut view
         allowlist_reason TEXT,
+        live_source      TEXT,            -- allowlist / trait_tree; NULL when not live
         pair_base_id     INTEGER,         -- sod_variant: the untagged base spell
         forever_sibling_id INTEGER,       -- sod_ported: the untagged Forever trainer spell
         class_name       TEXT,            -- class of the chain origin
@@ -905,10 +1023,10 @@ def materialize(conn, result, build):
         flags            TEXT,            -- JSON array
         build            TEXT NOT NULL)""")
     conn.executemany(
-        "INSERT INTO sod_tags VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO sod_tags VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [(r["spell_id"], r["tier"], json.dumps(r["reasons"], ensure_ascii=False),
           r["source_rule"], int(r["target_missing"]), int(r["live_in_forever"]),
-          r["allowlist_reason"], r["pair_base"], r["sibling"], r["class"], r["role"],
+          r["allowlist_reason"], r["live_source"], r["pair_base"], r["sibling"], r["class"], r["role"],
           json.dumps(r["flags"]), build)
          for r in sorted(result["tags"].values(), key=lambda r: r["spell_id"])])
     conn.execute("CREATE INDEX ix_sod_tags_tier ON sod_tags (tier)")
@@ -1084,7 +1202,23 @@ def render_report(result):
                  f"{d.rank.get(base, '')} | {how} |")
     L.append("")
 
-    allow = [r for r in rows if r["live_in_forever"]]
+    for source, title, blurb in (
+            ("trait_tree", "Live talent-tree spells",
+             "Tagged, and granted by a live Forever talent tree."),
+            ("forever_trainer", "Forever trainer spells",
+             "Tagged, and carrying a trainer row the SoD reference does not have: "
+             "Forever made the ability baseline.")):
+        hit = [r for r in rows if r["live_source"] == source]
+        L += [f"## {title} ({len(hit)})", "",
+              blurb + " `live_in_forever` is set structurally. The tier is kept: "
+              "SoD-derived, not cut.", ""]
+        for r in sorted(hit, key=lambda r: (r["class"] or "", r["name"] or "", r["spell_id"])):
+            why = next((x for x in r["reasons"] if x.startswith("live: ")), "")
+            L.append(f"- `{r['spell_id']}` {r['name']} ({r['class'] or 'no class'}) — "
+                     f"`{r['tier']}`; {why[6:]}")
+        L.append("")
+
+    allow = [r for r in rows if r["live_source"] == "allowlist"]
     L += [f"## Allowlist ({len(allow)})", ""]
     for r in allow:
         L.append(f"- `{r['spell_id']}` {r['name']} — detected `{r['tier']}`; "

@@ -24,6 +24,13 @@ sides of every changed text file (Lua, XML, TOC) for a unified diff, and caches
 the result as out/<to>/content_diff_<from>.json so the report can be rebuilt
 with WTL stopped. With neither WTL nor a cache it reports NOT MEASURED, never 0.
 
+Spell changes are also partitioned by whether a player can get the spell
+(`spell_reach.classify_changes`): player-facing, Season of Discovery (cut
+tiers), and unreachable / server-side. That reads `spell_reach` and `sod_tags`
+from out/<build>/wow.db, so run build_db.py first; without them the section
+says NOT MEASURED. 70170's first summary skipped this and reported SoD and
+creature spells as class changes.
+
 Output: reports/<from>_to_<to>.md, high-signal tables in full, everything else
 collapsed.
 
@@ -47,6 +54,7 @@ from datetime import datetime, timezone
 
 import config
 import contamination
+import spell_reach
 from diff_hotfixes import key_index, key_rows, load_csv, trunc
 
 csv.field_size_limit(min(sys.maxsize, 2**31 - 1))
@@ -723,7 +731,8 @@ def render_contents(cd):
     return L
 
 
-def render(old_build, new_build, results, findings, fd, unchanged_count, max_rows, gt=None, coverage=None, cd=None):
+def render(old_build, new_build, results, findings, fd, unchanged_count, max_rows, gt=None, coverage=None, cd=None,
+           sc=None):
     L = []
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     high = [r for r in results if r["table"] in HIGH_SIGNAL]
@@ -752,6 +761,14 @@ def render(old_build, new_build, results, findings, fd, unchanged_count, max_row
         L.append(f"| Files with changed content | {len(cd['modified']):,} |")
     else:
         L.append("| Files with changed content | **not measured** |")
+    if sc is not None and sc["status"] == "ok":
+        g = sc["groups"]
+        L.append(f"| Spells changed | {sc['total']:,} |")
+        L.append(f"| … player-facing | {len(g[spell_reach.PLAYER]):,} |")
+        L.append(f"| … Season of Discovery | {len(g[spell_reach.SOD]):,} |")
+        L.append(f"| … unreachable / server-side | {len(g[spell_reach.UNREACHABLE]):,} |")
+    else:
+        L.append("| Spells by reachability | **not measured** |")
     L.append("")
     L.append("---")
     L.append("")
@@ -762,6 +779,7 @@ def render(old_build, new_build, results, findings, fd, unchanged_count, max_row
     L += render_gametables(gt)
     L += render_schema_changes(results)
     L += contamination.render_markdown(findings, coverage)
+    L += spell_reach.render_markdown(sc or {"status": "unavailable", "reason": "not computed"})
 
     L.append("## Summary")
     L.append("")
@@ -933,7 +951,19 @@ def main(argv=None):
 
     config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     path = config.report_path(args.from_build, args.to_build)
-    path.write_text(render(args.from_build, args.to_build, results, findings, fd, unchanged, args.max_rows, gt, coverage, cd), encoding="utf-8")
+    sc = spell_reach.classify_changes(results, args.from_build, args.to_build)
+    if sc["status"] != "ok":
+        log(f"  spells by reachability: NOT MEASURED -- {sc['reason']}")
+    else:
+        g = sc["groups"]
+        log(f"  spells: {sc['total']:,} changed -- {len(g['player']):,} player-facing, "
+            f"{len(g['sod']):,} SoD, {len(g['unreachable']):,} unreachable"
+            + (f", {len(g['unmeasured']):,} unmeasured" if g["unmeasured"] else ""))
+        if sc["old_status"] != "ok":
+            log(f"    removed spells unmeasured: {sc['old_reason']}")
+
+    path.write_text(render(args.from_build, args.to_build, results, findings, fd, unchanged, args.max_rows, gt, coverage, cd,
+                           sc), encoding="utf-8")
     log("")
     log(f"  -> {path}")
     return 0

@@ -239,6 +239,36 @@ WHERE (t.tier IS NULL OR t.live_in_forever = 1
 Read `reason_chain` before repeating a tier as fact; it is the evidence.
 Use `enrich.Enricher.sod_tag(id)` from Python.
 
+`live_in_forever = 1` has three sources, named in `live_source`:
+- `allowlist`: hand-kept.
+- `trait_tree`: a live Forever talent tree grants the spell. Heating Up,
+  Maelstrom Weapon and Divine Aegis are examples.
+- `forever_trainer`: Forever added or changed the spell's trainer row
+  relative to the SoD client. Fire Nova and Victory Rush are examples.
+
+A tagged spell with `live_in_forever = 1` is SoD-derived and live, not cut.
+
+**A missing tag is not proof a spell is live.** For "can a player get this?",
+join `spell_reach` (one row per spell, `reachable` 0/1, with `root_kind` and
+`root_id`). That covers patch notes, class changes and "is this in the game".
+At 70170, Starfall 1300361 and Renew 1289450 are untagged but unreachable:
+Forever-ID copies of SoD spells. `reachable = 0` is not proof of cut either,
+because creature spells live server-side. Report those separately; don't drop
+them.
+
+```sql
+SELECT n.ID, n.Name_lang, r.root_kind, r.root_id, t.tier, t.live_source
+FROM SpellName n
+JOIN spell_reach r ON r.spell_id = n.ID
+LEFT JOIN sod_tags t ON t.spell_id = n.ID
+WHERE r.reachable = 1
+  AND (t.tier IS NULL OR t.live_in_forever = 1
+       OR t.tier NOT IN ('sod_rune', 'sod_book_candidate'))
+```
+
+Never write patch notes from `plain_` diffs without that partition.
+`diff_builds.py` and `render_patchnotes.py` do it themselves.
+
 ---
 
 ## Worked examples
@@ -361,5 +391,6 @@ clean result.
 - What is the base rate for the pattern being reported? (rule 6)
 - Is a missing table actually "not in this build"? (rule 7)
 - Is SoD content in the result, and should it be? Join `sod_tags` (rule 9)
+- Is a spell being called player-facing? Join `spell_reach` (rule 9)
 - For "what changed live", is the join between the unprefixed and `plain_`
   tables, rather than one of them alone?

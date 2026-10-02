@@ -143,6 +143,40 @@ class SodTags(unittest.TestCase):
             with self.subTest(sod=sod, base=base):
                 self.assertIsNone(tier(base))
 
+    def test_trait_tree_marks_live(self):
+        # Measured at 70170: SoD runes that a linked Forever talent tree grants.
+        # The tier stays -- SoD-derived, not cut.
+        for s in (400624, 400647, 408498, 431622, 427712):   # Heating Up, Fingers of
+            with self.subTest(spell=s):                       # Frost, Maelstrom Weapon,
+                r = RESULT["tags"].get(s)                     # Divine Aegis, Pandemic
+                self.assertIsNotNone(r)
+                self.assertEqual(r["tier"], sod_tags.RUNE)
+                self.assertTrue(r["live_in_forever"])
+                self.assertEqual(r["live_source"], "trait_tree")
+
+    def test_untreed_rune_stays_cut(self):
+        for s in (410002, 409914):
+            with self.subTest(spell=s):
+                self.assertFalse(RESULT["tags"][s]["live_in_forever"])
+                self.assertIsNone(RESULT["tags"][s]["live_source"])
+
+    def test_forever_trainer_marks_live(self):
+        # Trainer rows Forever added or changed relative to 1.15.9.
+        for s in (408341, 408345, 402927, 407632):   # Fire Nova r1/r5, Victory Rush,
+            with self.subTest(spell=s):               # Hammer of the Righteous
+                r = RESULT["tags"][s]
+                self.assertTrue(r["live_in_forever"])
+                self.assertEqual(r["live_source"], "forever_trainer")
+
+    def test_sod_identical_trainer_row_is_not_evidence(self):
+        # Same AcquireMethod-0 row in the SoD client: leftover, still cut.
+        for s in (415423, 401977, 438040):            # Aspect of the Viper,
+            with self.subTest(spell=s):               # Shadowfiend, Redirect
+                self.assertFalse(RESULT["tags"][s]["live_in_forever"])
+
+    def test_allowlist_keeps_its_source(self):
+        self.assertEqual(RESULT["tags"][435984]["live_source"], "allowlist")
+
     def test_enrich_view(self):
         v = sod_tags.tag_for(RESULT, 435984)
         self.assertEqual(v["tier"], sod_tags.BOOK)

@@ -66,6 +66,7 @@ import config
 import contamination
 import enrich
 import diff_builds
+import spell_reach
 from diff_hotfixes import (SYNTHETIC_PUSH_BASE, diff_table, fetch_hotfixes,
                            key_index, key_rows, load_csv, status_label)
 
@@ -573,6 +574,9 @@ def build_diff_model(from_build, to_build, e, manifest):
         "contents": diff_builds.diff_contents(from_build, to_build),
         "gametables": diff_builds.diff_gametables(old_dir, new_dir),
         "contamination": run_contamination_results(e, results),
+        # Who can get each changed spell. Reads spell_reach / sod_tags from
+        # both builds' wow.db; "unavailable" renders as NOT MEASURED.
+        "spells": spell_reach.classify_changes(results, from_build, to_build),
         "sections": [],
         "headline": [],
         "items_showcase": [],
@@ -1083,9 +1087,15 @@ def render_build_diff(m, e):
         L.append('<div class="banner good">')
         L.append(f"<h4>{changed} of {m['table_count']:,} tables changed "
                  f"({pct:.1f}% byte-identical)</h4>")
-        L.append("<p>This is a small diff, and that is the result rather than a "
-                 "gap in the extraction — every other shipped table is identical "
-                 "byte for byte."
+        # "Small" only when it is: 70170 changed 174 of 610 tables and this
+        # sentence used to call that small too.
+        small = pct >= 90.0
+        L.append("<p>"
+                 + ("This is a small diff, and that is the result rather than a "
+                    "gap in the extraction — every other shipped table is identical "
+                    "byte for byte." if small else
+                    "This is a content build: "
+                    f"{100 - pct:.1f}% of shipped tables changed.")
                  + (f" {n_mod:,} file(s) also changed content; see "
                     "<a href='#contents'>File contents</a>." if n_mod else "")
                  + "</p>")
@@ -1134,6 +1144,8 @@ def render_build_diff(m, e):
                      + esc("; ".join(r["schema_reasons"]))
                      + f" — fields comparable: {r['fields_comparable']}, "
                        f"rows comparable: {r['rows_comparable']}</p></div>")
+
+    L.append(render_spell_groups(m["spells"]))
 
     L.append(render_contamination(m["contamination"]))
 
@@ -1246,6 +1258,71 @@ def render_contents(cd):
             L.append(f"<tr><td class='mono'>{e['fdid']}</td><td>{esc(e['type'])}</td>"
                      f"<td class='mono'>{esc(e['filename'] or '(unnamed)')}</td></tr>")
         L.append("</tbody></table></details>")
+    return "\n".join(L)
+
+
+def render_spell_groups(sc):
+    """Changed spells, split by whether a player can get them.
+
+    The per-table detail further down lists every spell row that moved, which
+    is the audit. This is the reading order: player-facing first, then SoD
+    content still in the client, then spells no client table leads to.
+    """
+    L = ['<h2 id="spells">Spells by reachability</h2>']
+    if sc["status"] != "ok":
+        L.append('<div class="banner warn"><h4>Not measured</h4><p>'
+                 + esc(sc["reason"] or "spell_reach unavailable")
+                 + ". Spell changes appear only in the per-table detail below, "
+                 "unpartitioned. Re-run <code>build_db.py</code> for both builds.</p></div>")
+        return "\n".join(L)
+    g = sc["groups"]
+    L.append('<div class="stats">')
+    for k in spell_reach.GROUPS:
+        if g[k] or k != spell_reach.UNMEASURED:
+            L.append(f'<div class="stat"><div class="v">{len(g[k]):,}</div>'
+                     f'<div class="k">{esc(spell_reach.GROUP_TITLES[k])}</div></div>')
+    L.append("</div>")
+    L.append("<p class='sub'><strong>Player-facing</strong>: a skill line, live talent "
+             "tree, talent or live item leads to the spell. <strong>Season of "
+             "Discovery</strong>: a cut-tier SoD tag that no live talent tree rescues. "
+             "<strong>Unreachable</strong> is not proof of anything — creature spells "
+             "live server-side — but nothing in the client shows a player getting it. "
+             "Mechanical changes sort first; <em>text</em> means only tooltip strings "
+             "moved.</p>")
+    if sc["not_scanned"]:
+        L.append('<div class="note"><strong>Roots not scanned:</strong> '
+                 + esc(", ".join(sc["not_scanned"]))
+                 + ". Spells reachable only that way are listed as unreachable.</div>")
+    if sc["tags_missing"]:
+        L.append('<div class="note"><strong>sod_tags missing</strong> from this '
+                 "database, so nothing is in the Season of Discovery group.</div>")
+    if sc["old_status"] != "ok":
+        L.append('<div class="note"><strong>Removed spells not measured:</strong> '
+                 + esc(sc["old_reason"] or "") + "</div>")
+    root_label = {"skill_line": "skill line", "talent_tree": "talent tree",
+                  "talent": "talent", "item": "item"}
+    for k in spell_reach.GROUPS:
+        rows = g[k]
+        if not rows:
+            continue
+        opened = " open" if k == spell_reach.PLAYER else ""
+        mech = sum("mechanical" in r["kinds"] for r in rows)
+        L.append(f"<details{opened}><summary>{esc(spell_reach.GROUP_TITLES[k])} — "
+                 f"{len(rows):,} <span class='dim'>({mech:,} mechanical)</span></summary>"
+                 "<div class='details-body'><table><thead><tr><th>Spell</th><th>Name</th>"
+                 "<th>Change</th><th>Source</th><th>Tables</th></tr></thead><tbody>")
+        for r in rows[:400]:
+            src = (f"{root_label.get(r['root_kind'], r['root_kind'])} {r['root_id']}"
+                   if r["root_kind"] else "—")
+            if r["tier"]:
+                src += f" · {r['tier']}" + (" (live)" if r["live_in_forever"] else "")
+            kinds = ", ".join(r["kinds"]) + (" · removed" if r["removed"] else "")
+            L.append(f"<tr><td class='mono'>{r['spell_id']}</td><td>{esc(r['name'] or '—')}</td>"
+                     f"<td>{esc(kinds)}</td><td class='mono dim'>{esc(src)}</td>"
+                     f"<td class='mono dim'>{esc(', '.join(r['tables']))}</td></tr>")
+        if len(rows) > 400:
+            L.append(f"<tr><td colspan='5' class='dim'>… {len(rows) - 400:,} more</td></tr>")
+        L.append("</tbody></table></div></details>")
     return "\n".join(L)
 
 
