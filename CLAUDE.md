@@ -42,6 +42,19 @@ Outstanding:
       `/casc/diff` itself (see step 9 of the patch-day checklist). The overlay was measured the same day: new pushes 112262
       (weather/rain particulates), 112263 (Night Watchman's Torch), 112264
       (spam filters), 112271. See `reports/patchday_1.60.1.70058.md`.
+- [x] **1.60.1.70170 (2026-10-02) is the second content build.** 174 of 610
+      tables changed (+4,740 / −5,464 / ~3,060 rows), 4,210 files changed
+      content, the file set moved (+346 / −168), and encryption moved (+9,
+      of which +5 are unknown keys). Three schema changes:
+      `ChrRacesCreateScreenIcon`, `CreatureImmunities`, and
+      `UiModelSceneActor` (columns named, not moved). The overlay was
+      measured from a `DBCache.bin` written at 10:31 local with the client
+      **closed**, so it is not a mid-session lower bound. It has 24 tables
+      and 5 real pushes: 112078, 112323, 112340, 112347, 112349. 112347 is a
+      live talent-tree pass covering `TraitNode*`, `TraitDefinition` and
+      `TraitEdge`. **The first summary of this build reported SoD and
+      unreachable spells as class changes.** See *Reporting gap and
+      liveness* under **Season of Discovery tags**.
 
 ---
 
@@ -71,6 +84,7 @@ bound when looking for builds — it is a press date, not a data date.
 | 1.60.1 | 69977 | 2026-09-23 (captured) | `3bd89ce2721f7c75e7525dc83741076f` | `ed440cc894be6d92a02f076fa00ce2f5` |
 | 1.60.1 | 70009 | 2026-09-24 (captured) | `05215079e3905ef5922ae0b03ffefb73` | `9b3c456dbb837d133a026d380c7c13e9` |
 | 1.60.1 | 70058 | 2026-09-29 (captured) | `8f8ffb0634e955e8ff585ebaf9727509` | `a9028f7cf71de20b3915a042b23afd83` |
+| 1.60.1 | 70170 | 2026-10-02 (captured) | `d3f2837397a016e380ea51c4e1e78d1d` | `032ffa3587e5f762df7c6ef823e17596` |
 
 These hashes are the only way to reach a build after Blizzard rotates it off the
 live version list. Capture them every patch day, before anything else.
@@ -567,13 +581,13 @@ behaviour. A query excludes SoD content only if it joins `sod_tags` (see rule
 a live Forever spell is worse than a missed SoD spell, so ambiguous cases take
 the weaker tier.
 
-| Tier | Meaning | Cut view? | 70009 |
-|---|---|---|--:|
-| `sod_rune` | full engraving chain | yes | 829 |
-| `sod_book_candidate` | taught by a learn item with no `ItemSparse` row. Not proof | yes | 20 |
-| `sod_ported` | SoD ability whose same-name trainer sibling is absent from the SoD-era client, so Forever re-added it | no | 23 |
-| `sod_variant` | SoD ID of a spell whose base version is an untagged trainer spell | no | 94 |
-| `sod_flag` | weak signal only | no | 87 |
+| Tier | Meaning | Cut view? | 70009 | 70170 |
+|---|---|---|--:|--:|
+| `sod_rune` | full engraving chain | yes | 829 | 828 |
+| `sod_book_candidate` | taught by a learn item with no `ItemSparse` row. Not proof | yes | 20 | 20 |
+| `sod_ported` | SoD ability whose same-name trainer sibling is absent from the SoD-era client, so Forever re-added it | no | 23 | 24 |
+| `sod_variant` | SoD ID of a spell whose base version is an untagged trainer spell | no | 94 | 94 |
+| `sod_flag` | weak signal only | no | 87 | 87 |
 
 ### Detection, measured on 1.60.1.70009
 
@@ -664,6 +678,15 @@ under Mage against ~85 for every other class.
 - **Raw value scans, "unreferenced", or "no display data".**
 - **Aura-4 base points without the `seal_dummy_bp` conditions.** On
   their own they are raw value matches (see the table under step 3).
+- **An `ItemSparse` row, as evidence an item is live.** Measured at 70170:
+  280 items whose own `ItemEffect` spell is SoD-tagged still have one. Among
+  them are "Rune of Shadowstep" 210979, "Spell Notes: Brain Freeze" 208853,
+  and the scrambled "Spell Notes: TENGI RONEERA" puzzle items.
+- **A `SkillLineAbility` row, as evidence a spell is live.** 438 SLA rows
+  point at tagged spells. 270 of them sit on skill line **2851
+  Engraving**, which is the SoD rune system itself. AcquireMethod 3 means
+  "learned via another spell" (205 untagged rows, such as Tiger's Fury and
+  Judgement of Light), not "live".
 
 **Known gap.** Hammer of Wrath 429151 has no label, trigger, override or
 inbound declared reference. It is in `sod_manual.json` as `sod_flag`, because
@@ -685,6 +708,118 @@ not run reads **NOT SCANNED** in the report and in the table, never zero.
 `build_db.py` logs it loudly and still writes the rest of the database, and a
 missing `sod_tags` table is then an error, not "no SoD content".
 `scripts/test_sod_tags.py` pins the measured IDs.
+
+### Reporting gap and liveness, measured on 1.60.1.70170 (2026-10-02)
+
+**The tags were not applied to what got reported.** `diff_builds.py` and
+`render_patchnotes.py` never join `sod_tags`, and the hand-written 70170
+summary queried the `plain_` tables without them. That summary presented SoD
+and unreachable spells as class changes. Even with the join, the tags would
+not have caught them: **only 4 of the 967 spells changed at 70170 carry any
+SoD tag** (one `sod_rune`, Heating Up 400624). Tagging answers "is this
+SoD-derived?". The question a patch note needs answered is **"can a player
+get this?"**, and today nothing answers it.
+
+**Prototype: player reachability.** A spell is reachable when a chain leads
+to it from a live root. Edges are `EffectTriggerSpell`, enchant
+`EffectArg` (Effect 1/3/7 via Effect 53/54/92/156), and aura-332 overrides.
+The prototype used the live (hotfixed) tables. Roots, tightened step by step
+until the SoD leaks were measured:
+
+| Root set | Roots | Reachable | `sod_rune` reachable |
+|---|--:|--:|--:|
+| every SLA row, every `TraitDefinition`, every item with `ItemSparse` | 10,339 | 11,451 | (most of 828) |
+| SLA AcquireMethod 0/1/2 without Engraving 2851; linked trait trees only | 9,832 | 11,047 | 798 |
+| as above, minus 280 items whose own effect spell is tagged | 9,545 | 10,200 | **62** |
+
+Of the remaining 62: **29 are granted by live Forever talent trees** (below),
+and the rest are a second hop of SoD items (scrambled Spell Notes whose
+effect spell is untagged but triggers a rune) plus about 13 SLA rows. The
+second-hop item exclusion is not implemented yet.
+
+At the final stage, **516 of the 967 changed spells are unreachable** (111 of
+the 261 with mechanical changes in `SpellEffect` / `SpellMisc`). Unreachable
+does **not** mean SoD. NPC spells live server-side and are never reachable
+from client data (Holy Forgefire 1322218 is reachable only through Verigan's
+Fist 6953). It means "not verifiable as player-facing". Patch notes should
+put these spells in a separate section, not drop them.
+
+**Forever talent trees are live, and they grant tagged runes.** Class trait
+trees are linked to class skill lines through `SkillLineXTraitTree` (ID,
+SkillLineID, TraitTreeID, Variant). Nine are linked: 1082 Shaman (373), 1089
+Druid (574), 1091 Hunter (50), 1100 Paladin (184), 1111 Rogue (38), 1112 Mage
+(237), 1114 Priest (613), 1116 Warlock (354) and 1117 Warrior (26). They carry
+currency 3820 and costs 4044/4114. Trees 1081 (Shaman) and 1083 (Druid) are
+unlinked, and are probably drafts. `Blizzard_LegacySystem`'s
+`LegacyTreeData` covers a different set: professions, adventure and
+progression trees. Live push 112347 edits these trees, so read them from the
+hotfixed tables.
+
+**29 `sod_rune` spells and 1 `sod_flag` are talent-tree nodes on linked
+trees.** They are live in Forever, so their "likely cut" tier is a false
+positive:
+- **Druid:** Berserk, Eclipse, Natural Reaction
+- **Hunter:** Lone Wolf, Rapid Killing, Resourcefulness 440529 and 1242688,
+  and Survivalist's Discipline (the `sod_flag`)
+- **Mage:** Fingers of Frost, Heating Up, Missile Barrage
+- **Paladin:** Infusion of Light, Purifying Power
+- **Priest:** Divine Aegis, Renewed Hope, Soul Warding
+- **Rogue:** Cutthroat
+- **Shaman:** Lightning Overload, Maelstrom Weapon, Mental Dexterity, Water
+  Shield
+- **Warlock:** Decimation, Demonic Knowledge, Demonic Pact, Improved Drains,
+  Pandemic, Shadow and Flame
+- **Warrior:** Focused Rage 29787. A TBC-era ID, so the rune tag is suspect
+  in itself. Check its chain with `--spell`.
+
+This is the opposite error to under-tagging. The design rule says it is the
+worse one.
+
+**Forever-ID clones of SoD spells are invisible to the tagger.** Rule 4b
+pairs a SoD spell only with an untagged *trainer* sibling. A new Forever-ID
+spell that shares a name with a tagged SoD spell, and is not on any skill
+line or tree, falls through:
+- Starfall 1300361 shares its name with the SoD Druid rune Starfall
+  (439748/439755/439768). Its description is `$@spelldesc1300354`, and spell
+  1300354 **does not exist in the client**.
+- Renew 1289450 shares its name with the SoD Priest variant Renew
+  (425268-425271).
+- Soul Harvest 1242853 shares its name with the SoD Warlock book 437032.
+
+All three are unreachable, and all three were reported as class changes.
+Separately, Coward! 422978 and Cryoblast 440212 are SoD-era IDs present in
+1.15.9 and untagged. Cryoblast is reachable only through Scroll of Cryoblast
+217495, which also has a SoD-era ID, and its origin cannot be checked (next
+point).
+
+**The 1.15 reference is too thin for item checks.** `out/1.15.9.69722/`
+extracted 15 tables, and `wow.db` there loads only `SpellName`. There is no
+`ItemSparse` or `ItemEffect`, so "was this item in the SoD client?" cannot be
+asked.
+
+**Planned changes. None are implemented yet.**
+1. Add `player_reachable` and `reach_root` to `wow.db`, as a `spell_reach`
+   table built beside `sod_tags`, using the third root set above plus
+   second-hop SoD-item exclusion.
+2. In `sod_tags.py`, set `live_in_forever = 1` structurally when a tagged
+   spell is a node on a `SkillLineXTraitTree`-linked tree, with
+   `source_rule = 'trait_tree'`. Today that only happens through
+   `sod_allowlist.json`.
+3. Add a weak `sod_clone` tier: an untagged spell that shares its
+   `Name_lang` with a tagged rune, book or variant, is unreachable, and
+   (optionally) has a description that references a missing spell. Do not
+   use the `>1M` ID range as the signal (see **Not signals**).
+4. Tag SoD items, not just spells: items whose `ItemEffect` spell, or
+   anything that spell triggers, is tagged. Materialise them as
+   `sod_item_tags`.
+5. Make `diff_builds.py` and `render_patchnotes.py` partition spell changes
+   into three groups: **player-facing**, **SoD-tagged**, and **unreachable /
+   server-side**. Only the first belongs in the headline.
+6. Re-extract 1.15.9.69722 with `ItemSparse`, `ItemEffect`,
+   `ItemXItemEffect` and `SpellEffect`.
+
+The prototype script is not committed. It ran from the session scratchpad;
+the numbers above are its output on 70170.
 
 ---
 
@@ -744,6 +879,12 @@ carry across builds (see **Key facts**), so the rows may be re-pushed for
 
 **Watch:** whether a later 70009 wave re-pushes the three rows, and with the
 same timestamps.
+
+**70170 (2026-10-02):** still empty in the client and in the live overlay,
+and `check_findings.py` still reports FALSIFIED. This time the overlay was
+captured with the client closed, so it is not a lower bound. Push 112079 is
+not among the build's five real pushes. That makes two builds without the
+schedule. The first date, 12 October, is ten days out.
 
 ### 2. A shard/world mechanic being repositioned — RESOLVED at 70009 (shipped)
 
