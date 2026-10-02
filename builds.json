@@ -49,5 +49,13 @@
     "cdnConfig": "a9028f7cf71de20b3915a042b23afd83",
     "region": "us",
     "firstSeen": "2026-09-29T20:53:32+00:00"
+  },
+  "70170": {
+    "version": "1.60.1.70170",
+    "buildId": 70170,
+    "buildConfig": "d3f2837397a016e380ea51c4e1e78d1d",
+    "cdnConfig": "032ffa3587e5f762df7c6ef823e17596",
+    "region": "us",
+    "firstSeen": "2026-10-02T14:32:36+00:00"
   }
 }
