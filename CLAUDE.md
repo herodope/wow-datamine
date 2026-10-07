@@ -55,6 +55,29 @@ Outstanding:
       `TraitEdge`. **The first summary of this build reported SoD and
       unreachable spells as class changes.** See *Reporting gap and
       liveness* under **Season of Discovery tags**.
+- [x] **1.60.1.70245 (2026-10-07) is a hotfix build.** All 610 shipped DB2s
+      are byte-identical to 70170. `PlayerExpectedStat` shows only a
+      WoWDBDefs rename. The file set and encryption (5,057) did not move.
+      519 files were rewritten: 500 shaders, 17 DLLs, and 2 Lua bug fixes
+      (the whisper target pattern `%w+` → `%S+`, and `GenerateFlatClosure`
+      in talent tooltips). The overlay was measured with the client closed.
+      All 5 of 70170's real pushes carried over, unlike 70009. About 11 new
+      pushes, 112369–112463:
+      - Gnomeregan and BFD `DungeonEncounter.DifficultyID` 201/1 → 0/1.
+      - The Booty Bay Bruiser's Buckshot item is unhooked from its spell.
+      - New `Cfg_GameRules` 251–253 and `Cfg_SuperDistrict` 14.
+      - `ModifierTree` 459192 (beta/PTR/QA/entitlement any-of) gains a
+        `WORLD_STATE_EXPRESSION` branch.
+
+      **Diff a new build's overlay against the previous build's overlay**
+      with `render_patchnotes.py --since out/<prev>/db2_hotfixed`. The
+      hotfix report re-lists every carried-over push. See
+      `reports/patchday_1.60.1.70245.md`.
+- [ ] **`spell_reach` drifts with the client's item cache.** 9,070 → 9,098
+      reachable at 70245 on identical client data. All +28 are `item` roots
+      (3,041 → 3,069), from 163 `ItemSparse` rows the client cached under
+      synthetic push IDs. Consider rooting items on shipped `ItemSparse`
+      plus real-push rows only.
 
 ---
 
@@ -85,6 +108,7 @@ bound when looking for builds — it is a press date, not a data date.
 | 1.60.1 | 70009 | 2026-09-24 (captured) | `05215079e3905ef5922ae0b03ffefb73` | `9b3c456dbb837d133a026d380c7c13e9` |
 | 1.60.1 | 70058 | 2026-09-29 (captured) | `8f8ffb0634e955e8ff585ebaf9727509` | `a9028f7cf71de20b3915a042b23afd83` |
 | 1.60.1 | 70170 | 2026-10-02 (captured) | `d3f2837397a016e380ea51c4e1e78d1d` | `032ffa3587e5f762df7c6ef823e17596` |
+| 1.60.1 | 70245 | 2026-10-07 (captured) | `0bf141260c698dfc9cb3b5b7947b78c3` | `f39eaf0d23ad9a0f85fdbfc2713d3ed3` |
 
 These hashes are the only way to reach a build after Blizzard rotates it off the
 live version list. Capture them every patch day, before anything else.
@@ -963,6 +987,10 @@ and `check_findings.py` still reports FALSIFIED. This time the overlay was
 captured with the client closed, so it is not a lower bound. Push 112079 is
 not among the build's five real pushes. That makes two builds without the
 schedule. The first date, 12 October, is ten days out.
+
+**70245 (2026-10-07):** still empty in the client and live, with the
+overlay captured client-closed. That is three builds without it, and the
+first date is five days out.
 
 ### 2. A shard/world mechanic being repositioned — RESOLVED at 70009 (shipped)
 
