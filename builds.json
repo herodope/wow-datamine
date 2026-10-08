@@ -65,5 +65,13 @@
     "cdnConfig": "f39eaf0d23ad9a0f85fdbfc2713d3ed3",
     "region": "us",
     "firstSeen": "2026-10-07T20:49:39+00:00"
+  },
+  "70291": {
+    "version": "1.60.1.70291",
+    "buildId": 70291,
+    "buildConfig": "e8dd824cf6c3d96cd01f804ca2ea5a63",
+    "cdnConfig": "00df9e43531518b653a35289488c9bbb",
+    "region": "us",
+    "firstSeen": "2026-10-08T21:19:19+00:00"
   }
 }
