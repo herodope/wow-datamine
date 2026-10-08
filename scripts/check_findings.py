@@ -26,7 +26,7 @@ two cannot drift silently. Where parsing fails the script says so rather than
 falling back to a stale constant.
 
 A key distinction, and the reason several checks read `db2/` rather than a diff:
-the three contamination cases were pruned by **hotfix**. They vanish from a
+the contamination cases (now only the Item stubs) were pruned by **hotfix**. They vanish from a
 hotfix diff while remaining in the shipped client. "Gone from the diff" is not
 "gone from the build" -- only `db2/` answers that.
 
@@ -84,13 +84,7 @@ def parse_recorded(section):
     if not rec["time_events"]:
         rec["parse_errors"].append("finding 1: no TimeEventData rows parsed")
 
-    # Finding 2: GlobalStrings IDs in the code block
-    rec["string_ids"] = [int(x) for x in re.findall(r"^\s*(600\d\d|601\d\d)\s+\"", section, re.M)]
-    if not rec["string_ids"]:
-        rec["string_ids"] = [int(x) for x in re.findall(r"\b(60077|60078|60175)\b", section)]
-    rec["string_ids"] = sorted(set(rec["string_ids"]))
-    if not rec["string_ids"]:
-        rec["parse_errors"].append("finding 2: no GlobalStrings IDs parsed")
+    # Finding 2 was closed 2026-10-08 (shipped at 70009); see "Closed findings".
 
     # Finding 3: "481 carry vanilla PvP rank titles"
     # The doc wraps this across lines, so allow any whitespace run.
@@ -107,18 +101,13 @@ def parse_recorded(section):
     if not rec["light_column"]:
         rec["parse_errors"].append("finding 4: LightData column name not parsed")
 
-    # Finding 5: the three contamination records
-    rec["achievement_id"] = None
-    m = re.search(r"`Achievement`\s*(\d+)", section)
-    if m:
-        rec["achievement_id"] = m.group(1)
-    m = re.search(r"`LightParams`\s*(\d+)", section)
-    rec["lightparams_id"] = m.group(1) if m else None
+    # Finding 5, narrowed 2026-10-08 to the one open case: the Item stubs.
+    # Achievement 9275 and LightParams 453 were fixed in the 70009 client and
+    # moved to "Closed findings", outside the section this parser reads.
     m = re.search(r"(\d+)\s*`Item`\s*stubs", section)
     rec["item_stub_count"] = int(m.group(1)) if m else None
-    for k in ("achievement_id", "lightparams_id", "item_stub_count"):
-        if rec[k] is None:
-            rec["parse_errors"].append(f"finding 5: {k} not parsed")
+    if rec["item_stub_count"] is None:
+        rec["parse_errors"].append("finding 5: item_stub_count not parsed")
 
     return rec
 
@@ -239,56 +228,6 @@ def check_time_events(b, rec):
     ]
 
 
-def check_rename(b, rec):
-    ids = [str(i) for i in (rec.get("string_ids") or [])]
-    if not ids:
-        return UNCHECKABLE, ["CLAUDE.md string IDs could not be parsed"]
-
-    h_plain, plain = b.table("GlobalStrings")
-    h_hot, hot = b.table("GlobalStrings", hotfixed=True)
-    if h_hot is None:
-        return UNCHECKABLE, ["GlobalStrings not extracted"]
-
-    t_i = b.col(h_hot, "TagText_lang")
-    if t_i is None:
-        return UNCHECKABLE, ["TagText_lang column not found"]
-
-    notes, still_renamed, client_renamed = [], 0, 0
-    for sid in ids:
-        before = plain.get(sid, [None] * (t_i + 1))[t_i] if plain else None
-        after = hot.get(sid, [None] * (t_i + 1))[t_i] if hot else None
-        notes.append(f"    {sid}: client={before!r}")
-        notes.append(f"           live={after!r}")
-        if after and "refresh" in after.lower():
-            still_renamed += 1
-        if before and "refresh" in before.lower():
-            client_renamed += 1
-
-    def count(rows, needle):
-        return sum(1 for r in rows.values() if t_i < len(r) and needle in r[t_i].lower())
-
-    shard_client, shard_live = count(plain, "shard"), count(hot, "shard")
-    refresh_client, refresh_live = count(plain, "refresh the world"), count(hot, "refresh the world")
-
-    notes.append(f"  'shard' strings: {shard_client} in client, {shard_live} live")
-    notes.append(f"  'refresh the world' strings: {refresh_client} in client, {refresh_live} live")
-
-    # Per recorded ID, from the CLIENT text. This used to compare the count of
-    # strings containing "refresh the world" (one of the three says it) against
-    # the number of renamed IDs (three), so it could never resolve: at 70009
-    # the rename had shipped in the client and this still said "live-only".
-    if client_renamed == len(ids):
-        return RESOLVED, notes + [f"  all {len(ids)} recorded strings carry the rename in the CLIENT; it shipped"]
-    if b.has_overlay is False:
-        return UNMEASURED, notes + [b.NO_OVERLAY,
-                                    f"  client: {client_renamed} of {len(ids)} recorded strings renamed"]
-    if shard_live == 0 and shard_client > 0:
-        return RESOLVED, notes + ["  'shard' wording is gone from live data entirely"]
-    if still_renamed == 0:
-        return FALSIFIED, notes + ["  none of the recorded strings carry 'refresh' any more"]
-    return UNRESOLVED, notes + ["  rename still live-only; no supporting strings beyond the recorded three"]
-
-
 def check_pvp(b, rec):
     h_plain, plain = b.table("ItemSearchName")
     h_hot, hot = b.table("ItemSearchName", hotfixed=True)
@@ -380,98 +319,62 @@ def check_light_column(b, rec):
 
 
 def check_contamination(b, rec):
-    """Present in the CLIENT's plain data, not merely absent from a hotfix diff."""
-    notes, open_cases = [], 0
+    """The 75 retail Item stubs: present in the CLIENT's plain data, not merely
+    absent from a hotfix diff.
 
-    ach_id = rec.get("achievement_id")
-    if ach_id:
-        _h, ach = b.table("Achievement")
-        present = ach_id in ach
-        open_cases += present
-        notes.append(f"  Achievement {ach_id}: {'STILL IN CLIENT' if present else 'gone from client'}")
-
-    lp_id = rec.get("lightparams_id")
-    if lp_id:
-        # The finding is its use by a Light row on a map that EXISTS in the
-        # build (Light 269, Kalimdor), which the hotfix replaced. The row
-        # itself can survive for a retail-map Light (16161, map 3064) without
-        # affecting anything in this build. At 70009 the Kalimdor use was
-        # fixed in the client while the row stayed -- counting row presence
-        # alone reported that as still open.
-        _h, lp = b.table("LightParams")
-        h_light, light = b.table("Light")
-        _hm, maps = b.table("Map")
-        cont_i = b.col(h_light, "ContinentID")
-        cols = [i for i, n in enumerate(h_light or []) if n.lower().startswith("lightparamsid")]
-        live_use, dead_use = [], []
-        for k, r in light.items():
-            if any(i < len(r) and r[i] == lp_id for i in cols):
-                on_map = cont_i is not None and cont_i < len(r) and r[cont_i] in maps
-                (live_use if on_map else dead_use).append(k)
-        open_cases += bool(live_use)
-        if live_use:
-            notes.append(f"  LightParams {lp_id}: STILL USED IN CLIENT by Light "
-                         f"{', '.join(live_use[:6])} on map(s) present in this build")
-        elif lp_id in lp and dead_use:
-            notes.append(f"  LightParams {lp_id}: no longer used on any map in this build; row survives, "
-                         f"used only by Light {', '.join(dead_use[:6])} on absent map(s)")
-        else:
-            notes.append(f"  LightParams {lp_id}: no longer used on any map in this build"
-                         + ("; row survives unused" if lp_id in lp else "; row gone"))
-
+    Until 2026-10-08 this checked three cases and returned RESOLVED when any
+    one cleared, so it read "Resolved" for a month while every stub stayed in
+    the client. The other two cases are closed; this is the open one.
+    """
+    notes = []
     stub_ids = rec.get("item_stub_ids")
     stub_count = rec.get("item_stub_count")
     h_item, item = b.table("Item")
     if h_item is None:
-        notes.append("  Item stubs: Item not extracted")
-    elif not stub_ids:
-        notes.append("  Item stubs: the exact ID list could not be parsed from CLAUDE.md")
-        notes.append("    refusing to substitute a population count for the finding")
-    else:
-        present = [i for i in stub_ids if i in item]
-        gone = [i for i in stub_ids if i not in item]
-        open_cases += 1 if present else 0
-        notes.append(
-            f"  Item stubs: {len(present)} of {len(stub_ids)} recorded IDs STILL IN CLIENT"
-            + (f", {len(gone)} gone" if gone else "")
+        return UNCHECKABLE, ["  Item stubs: Item not extracted"]
+    if not stub_ids:
+        return UNCHECKABLE, ["  Item stubs: the exact ID list could not be parsed from CLAUDE.md",
+                             "    refusing to substitute a population count for the finding"]
+    present = [i for i in stub_ids if i in item]
+    gone = [i for i in stub_ids if i not in item]
+    notes.append(
+        f"  Item stubs: {len(present)} of {len(stub_ids)} recorded IDs STILL IN CLIENT"
+        + (f", {len(gone)} gone" if gone else "")
+    )
+    if gone and present:
+        notes.append(f"    partially pruned; gone: {', '.join(gone[:12])}"
+                     + ("…" if len(gone) > 12 else ""))
+    if stub_count is not None and len(stub_ids) != stub_count:
+        notes.append(f"    WARNING: CLAUDE.md says {stub_count} stubs but lists "
+                     f"{len(stub_ids)} IDs — the record is inconsistent")
+
+    # Context only, never the check. Orphanhood is normal in this build.
+    cls_i, sub_i = b.col(h_item, "ClassID"), b.col(h_item, "SubclassID")
+    _hs, sparse = b.table("ItemSparse")
+    _hn, search = b.table("ItemSearchName")
+    have = set(sparse) | set(search)
+    if cls_i is not None and sub_i is not None:
+        pop = sum(
+            1 for k, r in item.items()
+            if k not in have and cls_i < len(r) and sub_i < len(r)
+            and r[cls_i] == "4" and r[sub_i] == "0"
         )
-        if gone and present:
-            notes.append(f"    partially pruned; gone: {', '.join(gone[:12])}"
-                         + ("…" if len(gone) > 12 else ""))
-        if stub_count is not None and len(stub_ids) != stub_count:
-            notes.append(f"    WARNING: CLAUDE.md says {stub_count} stubs but lists "
-                         f"{len(stub_ids)} IDs — the record is inconsistent")
+        notes.append(f"    (context: {pop:,} ClassID 4/SubclassID 0 orphans exist in "
+                     "total; that population is NOT the finding)")
 
-        # Context only, never the check. Orphanhood is normal in this build.
-        cls_i, sub_i = b.col(h_item, "ClassID"), b.col(h_item, "SubclassID")
-        _hs, sparse = b.table("ItemSparse")
-        _hn, search = b.table("ItemSearchName")
-        have = set(sparse) | set(search)
-        if cls_i is not None and sub_i is not None:
-            pop = sum(
-                1 for k, r in item.items()
-                if k not in have and cls_i < len(r) and sub_i < len(r)
-                and r[cls_i] == "4" and r[sub_i] == "0"
-            )
-            notes.append(f"    (context: {pop:,} ClassID 4/SubclassID 0 orphans exist in "
-                         "total; that population is NOT the finding)")
-
-    if open_cases == 0:
-        return RESOLVED, notes + ["  all three cleared from the shipped client"]
-    if open_cases == 3:
-        return UNRESOLVED, notes + [
-            "  all three still present in the client; the hotfix prunes were stopgaps",
-            "  (they are absent from the hotfix diff, which is NOT the same thing)",
-        ]
-    return RESOLVED, notes + [f"  {3 - open_cases} of 3 cleared from the client; partial fix shipped"]
+    if not present:
+        return RESOLVED, notes + ["  every recorded stub is gone from the shipped client"]
+    return UNRESOLVED, notes + [
+        "  still in the client; the hotfix prune was a stopgap",
+        "  (absent from a hotfix diff is NOT the same as gone from the build)",
+    ]
 
 
 CHECKS = [
     ("1. Weekly event schedule", check_time_events),
-    ("2. Transfer -> Refresh rename", check_rename),
     ("3. Vanilla PvP rank ladder", check_pvp),
     ("4. LightData column 055", check_light_column),
-    ("5. Retail contamination cases", check_contamination),
+    ("5. Retail Item stubs in the client", check_contamination),
 ]
 
 
