@@ -74,9 +74,23 @@ Outstanding:
       hotfix report re-lists every carried-over push. See
       `reports/patchday_1.60.1.70245.md`.
 - [x] **1.60.1.70291 (2026-10-08) is the third content build.** It was
-      extracted **before anyone could log in**: `DBCache.bin` predates the
-      patch, so the overlay is empty (`db2_hotfixed` = `db2`) and
-      **unmeasured, not clean**. 157 of 611 tables changed (+4,966 / −321 /
+      first extracted **before anyone could log in**, with an empty overlay.
+      The overlay was **measured the same day** from a `DBCache.bin` with a
+      build-70291 header, written at 18:02 local with the client **closed**,
+      after `/dbc/reloadHotfixes` and `extract_db2.py --restart`. It has 7
+      tables and 4 real pushes. 112078 carried over, and the new ones are:
+      - 112469: Rend Flesh 10.5 → 12.5. Highland Venom −15 → −20, with its
+        duration going from 15 min to 10 min.
+      - 112486: Sacred Cleansing's radius moves from the min column to the
+        max column.
+      - 112504: twelve Magram/Necrokhan quest weapons go from ilvl 43 to 42.
+
+      It also adds 3 `TactKey` rows (8341–8343) and bulk-injects about 4.5k
+      `ItemSparse`/`ItemSearchName` records. The October 8 dungeon-XP change
+      is server-side and invisible here. **Use `hotfix_<build>.md` for a
+      content build's hotfixes, not the cross-build `--since` wave.** The
+      wave mixes in client changes, and its banner now says so. 157 of 611
+      tables changed (+4,966 / −321 /
       ~2,283 rows). There is one new table, `UICinematicIntroInfo`, and no
       schema changes. 5,504 files changed content. Encryption moved by 36
       files, from `EncryptedUnknownKey` to `EncryptedButNot`. **193,186 FDIDs
@@ -99,14 +113,24 @@ Outstanding:
         `SpellAuraNames`, so do not decode it. Mana Tide Totem is trained at
         25 instead of 40. Penance mana costs go up. Water Shield loses its
         15 s category cooldown.
-- [ ] **The spell-change view misses talent values.** Checked against
-      foreverchanges.pro's 70170 notes on 2026-10-08. Redoubt (6 → 4% per
-      rank), Deflection (2 → 1%) and Improved Slam (its effect-2 curve
-      deleted live, so it falls back to −3000 ms per rank) all change only
-      in `TraitDefinitionEffectPoints` / `CurvePoint`. The reports show them
-      as raw rows and never attribute them to the spell. Fix: join
-      `TraitDefinition.SpellID` → effect points → curve, and fold the
-      result into the spell-change partition.
+- [x] **Talent values are now attributed to their spells.** The gap was
+      found against foreverchanges.pro's 70170 notes on 2026-10-08.
+      Redoubt (6 → 4% per rank), Deflection (2 → 1%) and Improved Slam
+      (effect-2 curve deleted live) changed only in
+      `TraitDefinitionEffectPoints` / `CurvePoint`. `player_notes.py` reads
+      them as a "value per rank" field. A deleted curve falls back to the
+      spell's own points.
+- [x] **Build-diff pages lead with a player edition** (`player_notes.py`,
+      2026-10-08). It goes class → spec → spell, with Buff / Nerf / Change /
+      New / Removed, before → after values, provenance, and a per-class
+      summary. The old table audit sits in a collapsed appendix.
+      Contamination stays outside it. It is judged **live against live**
+      across four states (old/new × client/live). A client change that
+      matches the old live value is **FOLDED**: it is listed as "already
+      live" and kept out of the counts. Buff and nerf are inferred only for
+      fields with an unambiguous direction. Raw flags and masks are dimmed
+      and never headline a class. The hotfix and `--since` pages are not
+      converted yet.
 - [ ] **`spell_reach` drifts with the client's item cache.** 9,070 → 9,098
       reachable at 70245 on identical client data. All +28 are `item` roots
       (3,041 → 3,069), from 163 `ItemSparse` rows the client cached under
@@ -1577,6 +1601,8 @@ apply to the libraries.
 │   ├── query.py             # read-only SQL CLI over wow.db
 │   ├── mcp_server.py        # same database over MCP stdio, read-only
 │   ├── render_patchnotes.py # self-contained HTML, hotfix + build-diff modes
+│   ├── player_notes.py      # build-diff player edition: class -> spec -> spell, live vs live
+│   ├── test_player_notes.py # pins provenance and buff/nerf direction rules (stdlib unittest)
 │   └── diff_builds.py       # compare two build dirs, emit markdown
 ├── out/                     # GITIGNORED — extracted data
 │   └── <version>.<build>/
