@@ -131,6 +131,44 @@ Outstanding:
       fields with an unambiguous direction. Raw flags and masks are dimmed
       and never headline a class. The hotfix and `--since` pages are not
       converted yet.
+- [x] **Rage mechanics, traced 2026-10-08 across 70058–70291.** Warrior
+      crit rage is in the data. The bear version is not.
+      - **Warrior crit rage is `Rule of Rage (DND)` 1322574.** It is new at
+        70170, on skill line 95 Defense with `ClassMask` 1 (warrior only), and
+        has one effect: `EffectAura` 4 (dummy). The server applies it, so the
+        formula is server-side, but the number is client data. 70170 shipped
+        **10**, the 10-02 hotfix set it to **100**, and the 70291 client
+        ships 100 (folded). 100 matches "100% more Rage". The shipped 10 is
+        unexplained and matches neither 75 nor 100. Do not assert units.
+      - **Dual Wield Specialization 23584, off-hand rage** (talent effect 1):
+        70058 had 20/40/60/80/100. The 70170 client shipped **2/4/6/8/10**,
+        a copy of effect 2's hit curve. The hotfix corrected it to
+        10/20/30/40/50, and 70291 ships that. This is the value
+        foreverchanges.pro could only source to Aidan Moon.
+      - Lingering Rage 1323964: the decay delay is a talent value,
+        2000–10000 ms. The decay itself is server-side.
+      - Unbridled Wrath: "1 Rage whatever you wield" is **not visible**. Its
+        energize spell 12964 gave 10 (1 Rage) in every build, so the old
+        two-hander rule was server-side.
+      - **Bear crit rage (75%) is not in the client.** No bear counterpart to
+        Rule of Rage exists in any build. `EffectAura` 668, added at 70170
+        with value 0 to Bear Form 5487, Dire Bear Form 9634, Defensive
+        Stance 71 and Righteous Fury 25780, is **not** a rage aura:
+        Righteous Fury is a paladin aura. 668 is unnamed, so do not decode
+        it.
+      - Unannounced at 70291: Bear Form (Passive2) 21178 goes from
+        `EffectAura` 10 value 30 to **50**. That is bear threat, not rage.
+- [ ] **`spell_reach` drops class passives whose acquire method moved to 3.**
+      Rule of Rage is `AcquireMethod` 2 at 70170, which makes it reachable
+      through skill line 95. At 70291 it is 3, "learned via another spell",
+      and no edge leads to it, so it is unreachable and the player edition
+      leaves it out. The same mechanism can hide any class-locked passive.
+      Candidate fix: treat an `AcquireMethod` 3 row with a single-class
+      `ClassMask` as a root when nothing else reaches the spell. Measure the
+      population first, per rule 6 in the wow-query skill.
+- [x] **`check_findings.py` at 70291 with the overlay measured:** #1
+      FALSIFIED (`TimeEventData` empty in client and live), #2 and #5
+      RESOLVED, #3 and #4 UNRESOLVED. #3 is still 481 live-only.
 - [ ] **`spell_reach` drifts with the client's item cache.** 9,070 → 9,098
       reachable at 70245 on identical client data. All +28 are `item` roots
       (3,041 → 3,069), from 163 `ItemSparse` rows the client cached under
