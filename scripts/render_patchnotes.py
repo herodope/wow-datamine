@@ -52,6 +52,7 @@ Usage:
 
 import argparse
 import base64
+import hashlib
 import html
 import json
 import pathlib
@@ -1379,6 +1380,26 @@ def render_build_table(t, r, e):
     return "\n".join(L)
 
 
+def client_tables_moved(baseline, build):
+    """Shipped tables that differ between the baseline's build and this one.
+
+    0 for a same-build snapshot, and for a hotfix-only build whose DB2s are
+    byte-identical (70245 against 70170) -- there the wave reading holds.
+    """
+    if baseline.name != "db2_hotfixed" or baseline.parent.name == build:
+        return 0
+    before, after = baseline.parent / "db2", config.build_out_dir(build) / "db2"
+
+    # Data rows only: a WoWDBDefs column rename rewrites the header line of
+    # an unchanged table (PlayerExpectedStat, 70170 -> 70245).
+    def digests(d):
+        return {p.name: hashlib.sha256(p.read_bytes().partition(b"\n")[2]).hexdigest()
+                for p in d.glob("*.csv")}
+
+    a, b = digests(before), digests(after)
+    return sum(1 for k in a.keys() | b.keys() if a.get(k) != b.get(k))
+
+
 def render(model, e, icons):
     m, mf = model, model["manifest"]
     totals = mf.get("totals") or {}
@@ -1395,7 +1416,19 @@ def render(model, e, icons):
     w = m.get("wave")
 
     L.append(f"<h1>World of Warcraft: Forever — {esc(m['build'])}</h1>")
-    if wave:
+    moved = client_tables_moved(m["baseline"], m["build"]) if wave else 0
+    if wave and moved:
+        # A previous build's overlay as baseline: the client changed in
+        # between, so client edits show up here as if they were hotfixes.
+        L.append(f"<p class='sub'><strong>Live against live, across a client "
+                 f"patch.</strong> Before is the live overlay of "
+                 f"<code>{esc(m['baseline'].parent.name)}</code>, after is this "
+                 f"build's. <strong>{moved:,} shipped table(s) differ between "
+                 f"the two clients</strong>, so rows here include client changes, "
+                 f"not only hotfixes — a row \"withdrawn\" may simply have left the "
+                 f"client. For hotfixes alone read <code>hotfix_{esc(m['build'])}"
+                 f".md</code>. Generated {esc(now)} from local extraction.</p>")
+    elif wave:
         # The point of this page is that the build did NOT change. Say it in
         # the subtitle, not three screens down.
         L.append(f"<p class='sub'><strong>Hotfix wave on an unchanged "
@@ -1535,7 +1568,10 @@ def main(argv=None):
                             baseline=baseline)
         html_text = render(model, e, icons)
         if baseline is not None:
-            stamp = baseline.name.replace(SNAPSHOT_PREFIX, "")
+            # Another build's live overlay is named after that build, not
+            # after its directory (which is always `db2_hotfixed`).
+            stamp = (baseline.parent.name if baseline.name == "db2_hotfixed"
+                     else baseline.name.replace(SNAPSHOT_PREFIX, ""))
             default = (config.REPORTS_DIR
                        / f"hotfixwave_{e.build}_since_{stamp}.html")
         else:
