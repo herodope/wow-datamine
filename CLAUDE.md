@@ -73,6 +73,40 @@ Outstanding:
       with `render_patchnotes.py --since out/<prev>/db2_hotfixed`. The
       hotfix report re-lists every carried-over push. See
       `reports/patchday_1.60.1.70245.md`.
+- [x] **1.60.1.70291 (2026-10-08) is the third content build.** It was
+      extracted **before anyone could log in**: `DBCache.bin` predates the
+      patch, so the overlay is empty (`db2_hotfixed` = `db2`) and
+      **unmeasured, not clean**. 157 of 611 tables changed (+4,966 / −321 /
+      ~2,283 rows). There is one new table, `UICinematicIntroInfo`, and no
+      schema changes. 5,504 files changed content. Encryption moved by 36
+      files, from `EncryptedUnknownKey` to `EncryptedButNot`. **193,186 FDIDs
+      left the build** (+201): retail WMOs, `item/objectcomponents`,
+      `item/texturecomponents` and `world/expansion01`–`11`. That is a real
+      retail-asset strip, not a listfile artifact. WTL loaded the full
+      listfile.
+      - **The 70170 warrior hotfix pass (112347) is folded into the client.**
+        `plain_` 70291 equals live 70245 byte for byte for Bloodthirst,
+        Booming Voice, Raging Blows, Gore Drinker and the rest.
+        `diff_builds.py` compares client to client, so it reports them as new.
+        Of 179 mechanically changed player-facing spells, **16 are folded
+        hotfixes and 163 are new**. To separate the two, diff the new
+        `plain_` against the previous build's **live** tables.
+      - New in 70291: ranks 1–5 of the base nukes and heals are re-curved
+        (Fireball rank 1 per level goes 0.6 → 0.2, and ranks 6+ are
+        untouched). Every armor aura moves from `EffectAura` 22 to 674:
+        Devotion Aura, Sunder Armor, Faerie Fire, Expose Armor, Curse of
+        Recklessness and Mark of the Wild. 674 is not named in
+        `SpellAuraNames`, so do not decode it. Mana Tide Totem is trained at
+        25 instead of 40. Penance mana costs go up. Water Shield loses its
+        15 s category cooldown.
+- [ ] **The spell-change view misses talent values.** Checked against
+      foreverchanges.pro's 70170 notes on 2026-10-08. Redoubt (6 → 4% per
+      rank), Deflection (2 → 1%) and Improved Slam (its effect-2 curve
+      deleted live, so it falls back to −3000 ms per rank) all change only
+      in `TraitDefinitionEffectPoints` / `CurvePoint`. The reports show them
+      as raw rows and never attribute them to the spell. Fix: join
+      `TraitDefinition.SpellID` → effect points → curve, and fold the
+      result into the spell-change partition.
 - [ ] **`spell_reach` drifts with the client's item cache.** 9,070 → 9,098
       reachable at 70245 on identical client data. All +28 are `item` roots
       (3,041 → 3,069), from 163 `ItemSparse` rows the client cached under
@@ -109,6 +143,7 @@ bound when looking for builds — it is a press date, not a data date.
 | 1.60.1 | 70058 | 2026-09-29 (captured) | `8f8ffb0634e955e8ff585ebaf9727509` | `a9028f7cf71de20b3915a042b23afd83` |
 | 1.60.1 | 70170 | 2026-10-02 (captured) | `d3f2837397a016e380ea51c4e1e78d1d` | `032ffa3587e5f762df7c6ef823e17596` |
 | 1.60.1 | 70245 | 2026-10-07 (captured) | `0bf141260c698dfc9cb3b5b7947b78c3` | `f39eaf0d23ad9a0f85fdbfc2713d3ed3` |
+| 1.60.1 | 70291 | 2026-10-08 (captured) | `e8dd824cf6c3d96cd01f804ca2ea5a63` | `00df9e43531518b653a35289488c9bbb` |
 
 These hashes are the only way to reach a build after Blizzard rotates it off the
 live version list. Capture them every patch day, before anything else.
