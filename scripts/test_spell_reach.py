@@ -62,6 +62,19 @@ class SpellReach(unittest.TestCase):
         self.assertEqual((r["root_kind"], r["via_edge"], r["via_spell"]),
                          ("skill_line", "enchant", 1248805))
 
+    def test_class_passive_root(self):
+        # Rule of Rage (DND): warrior crit rage on 95 Defense. AcquireMethod 2
+        # (a skill_line root) at 70170, 3 from 70291 on.
+        self.assertIn(root(1322574), ("skill_line", "class_passive"))
+        self.assertEqual(RESULT["reach"][1322574]["root_id"], 95)
+
+    def test_class_passive_stays_narrow(self):
+        # AM 3 with a single-class mask on any line is 262 spells at 70291;
+        # this root must not open that door. Tiger's Fury was removed at 70170.
+        hits = next(c["hits"] for c in RESULT["coverage"] if c["root"] == "class_passive")
+        self.assertLessEqual(hits, 5)
+        self.assertIsNone(root(5217))
+
     def test_engraving_is_not_a_root(self):
         self.assertIsNone(root(400102))         # Engrave Pants - Envenom
 

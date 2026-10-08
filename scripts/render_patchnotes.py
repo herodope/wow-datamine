@@ -1560,8 +1560,8 @@ def render_spell_groups(sc):
     if sc["old_status"] != "ok":
         L.append('<div class="note"><strong>Removed spells not measured:</strong> '
                  + esc(sc["old_reason"] or "") + "</div>")
-    root_label = {"skill_line": "skill line", "talent_tree": "talent tree",
-                  "talent": "talent", "item": "item"}
+    root_label = {"skill_line": "skill line", "class_passive": "class passive on skill line",
+                  "talent_tree": "talent tree", "talent": "talent", "item": "item"}
     for k in spell_reach.GROUPS:
         rows = g[k]
         if not rows:

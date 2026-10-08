@@ -18,6 +18,17 @@ Roots (the places a player gets a spell from):
                  270 tagged rows sit on it. AcquireMethod 3 means "learned via
                  another spell" (Tiger's Fury, Judgement of Light) and arrives
                  through the edges instead.
+    class_passive  SkillLineAbility, AcquireMethod 3, on a skill line that is
+                 not a class line (SkillLine.CategoryID <> 7), with a ClassMask
+                 naming exactly one class. A class-locked passive parked on a
+                 general line. Rule of Rage (DND) 1322574, the warrior
+                 crit-rage passive on 95 Defense, moved from AcquireMethod 2
+                 to 3 at 70291 and nothing teaches it, so without this root it
+                 fell out of the player edition. Deliberately narrow: AM 3 with
+                 a single-class mask on ANY line matches 262 spells at 70291,
+                 mostly effect copies (Holy Light, Judgement and Execute effects)
+                 plus Tiger's Fury, which was removed from the game. This rule
+                 matches 1 at 70291 and 0 at 70170.
     talent_tree  TraitDefinition SpellID / VisibleSpellID on a node of a LIVE
                  trait tree (see live_trait_trees). OverridesSpellID is the
                  spell being replaced, so it is not granted.
@@ -61,6 +72,8 @@ import config
 
 ENGRAVING_SKILL_LINE = 2851
 ROOT_ACQUIRE_METHODS = (0, 1, 2)
+LEARNED_VIA_SPELL = 3                   # AcquireMethod: taught by another spell
+CLASS_SKILL_CATEGORY = 7                # SkillLine.CategoryID of class/spec lines
 ENCHANT_EFFECTS = (53, 54, 92, 156)     # SpellEffect.Effect: enchant item variants
 ENCHANT_SPELL_SLOTS = (1, 3, 7)         # SpellItemEnchantment.Effect_N: proc, equip, use
 AURA_OVERRIDE = 332
@@ -74,6 +87,7 @@ SOD_ITEM_TIERS = ("sod_rune", "sod_book_candidate", "sod_flag")
 
 ROOT_TABLES = {
     "skill_line": ("SkillLineAbility",),
+    "class_passive": ("SkillLineAbility", "SkillLine"),
     "talent_tree": ("TraitDefinition", "TraitNodeEntry", "TraitNodeXTraitNodeEntry",
                     "TraitNode", "TraitTree", "SkillLineXTraitTree"),
     "talent": ("Talent",),
@@ -272,6 +286,19 @@ def compute(conn, tags=None, build=None):
         c["note"] = (f"AcquireMethod {'/'.join(map(str, ROOT_ACQUIRE_METHODS))}, "
                      f"skill line {ENGRAVING_SKILL_LINE} (Engraving) excluded")
 
+    c = cov("class_passive")
+    if c["status"] == "scanned":
+        category = {i: _int(cat) for i, cat in conn.execute("SELECT ID, CategoryID FROM SkillLine")}
+        for spell, acq, skill, mask in conn.execute(
+                "SELECT Spell, AcquireMethod, SkillLine, ClassMask FROM SkillLineAbility"):
+            m = _int(mask)
+            if (_int(acq) == LEARNED_VIA_SPELL and m > 0 and m & (m - 1) == 0
+                    and _int(skill) != ENGRAVING_SKILL_LINE
+                    and category.get(_int(skill)) != CLASS_SKILL_CATEGORY):
+                add(_int(spell), "class_passive", _int(skill), c)
+        c["note"] = (f"AcquireMethod {LEARNED_VIA_SPELL}, single-class ClassMask, "
+                     f"non-class skill line")
+
     c = cov("talent_tree")
     if c["status"] == "scanned":
         trees = live_trait_trees(conn)
@@ -346,8 +373,8 @@ def materialize(conn, result, build):
     conn.execute("""CREATE TABLE spell_reach (
         spell_id    INTEGER PRIMARY KEY,
         reachable   INTEGER NOT NULL,  -- 1: some root leads here
-        root_kind   TEXT,              -- skill_line / talent_tree / talent / item
-        root_id     INTEGER,           -- SkillLine, TraitTree, Talent or Item ID
+        root_kind   TEXT,              -- skill_line / class_passive / talent_tree / talent / item
+        root_id     INTEGER,           -- SkillLine (also for class_passive), TraitTree, Talent or Item ID
         root_spell  INTEGER,           -- the spell the root grants
         via_spell   INTEGER,           -- parent on the shortest chain; NULL at a root
         via_edge    TEXT,              -- trigger / enchant / override

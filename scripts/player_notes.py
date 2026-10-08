@@ -341,9 +341,17 @@ class _Owners:
             if owner:
                 self.skill[sid] = (owner, name or f"Skill {sid}")
         self.by_spell = {}
-        for spell, sl in conn.execute("SELECT Spell, SkillLine FROM SkillLineAbility"):
-            if sl in self.skill and spell not in self.by_spell:
-                self.by_spell[spell] = self.skill[sl]
+        names = {i: n for i, n in conn.execute("SELECT ID, DisplayName_lang FROM SkillLine")}
+        for spell, sl, mask in conn.execute(
+                "SELECT Spell, SkillLine, ClassMask FROM SkillLineAbility"):
+            owner = self.skill.get(sl)
+            # A class-locked row on a general line belongs to that class:
+            # Rule of Rage (DND) is ClassMask 1 on 95 Defense.
+            m = mask or 0
+            if (owner is None or owner[0] == "Professions & other") and                     m > 0 and m & (m - 1) == 0 and cls.get(m.bit_length()):
+                owner = (cls[m.bit_length()], names.get(sl) or f"Skill {sl}")
+            if owner and spell not in self.by_spell:
+                self.by_spell[spell] = owner
         # Talent trees: one per class, via its skill line.
         self.tree = {}
         if "SkillLineXTraitTree" in _tables(conn):
