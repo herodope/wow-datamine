@@ -158,17 +158,19 @@ Outstanding:
         it.
       - Unannounced at 70291: Bear Form (Passive2) 21178 goes from
         `EffectAura` 10 value 30 to **50**. That is bear threat, not rage.
-- [ ] **`spell_reach` drops class passives whose acquire method moved to 3.**
-      Rule of Rage is `AcquireMethod` 2 at 70170, which makes it reachable
-      through skill line 95. At 70291 it is 3, "learned via another spell",
-      and no edge leads to it, so it is unreachable and the player edition
-      leaves it out. The same mechanism can hide any class-locked passive.
-      Candidate fix: treat an `AcquireMethod` 3 row with a single-class
-      `ClassMask` as a root when nothing else reaches the spell. Measure the
-      population first, per rule 6 in the wow-query skill.
+- [x] **`spell_reach` dropped class passives whose acquire method moved to
+      3.** Rule of Rage is `AcquireMethod` 2 at 70170 and 3 at 70291, and
+      nothing teaches it. Fixed with the narrow `class_passive` root (see
+      **Player reachability**). `player_notes.py` now files a spell under the
+      class its `SkillLineAbility.ClassMask` names when its skill line has no
+      class of its own, so Rule of Rage goes under Warrior and not
+      "Professions & other".
 - [x] **`check_findings.py` at 70291 with the overlay measured:** #1
-      FALSIFIED (`TimeEventData` empty in client and live), #2 and #5
-      RESOLVED, #3 and #4 UNRESOLVED. #3 is still 481 live-only.
+      FALSIFIED (`TimeEventData` empty in client and live; decide after
+      2026-10-12), and #3, #4 and #5 UNRESOLVED. #3 is still 481
+      live-only, and #5 still has all 75 stubs. #2 and the fixed parts of
+      #5 moved to **Closed findings**. #5's old check called a partial fix
+      RESOLVED.
 - [ ] **`spell_reach` drifts with the client's item cache.** 9,070 → 9,098
       reachable at 70245 on identical client data. All +28 are `item` roots
       (3,041 → 3,069), from 163 `ItemSparse` rows the client cached under
@@ -961,6 +963,12 @@ error.
 
 - **Roots:**
   - `skill_line`: AcquireMethod 0/1/2, excluding 2851 Engraving.
+  - `class_passive` (added 2026-10-08): AcquireMethod 3, a single-class
+    `ClassMask`, on a skill line that is not a class line (`CategoryID` <> 7).
+    `root_id` is the skill line. It matches 1 spell at 70291, Rule of Rage
+    1322574 on 95 Defense, and 0 at 70170. AM 3 with a single-class mask on
+    **any** line matches 262 at 70291: effect copies plus Tiger's Fury,
+    which was removed from the game. Do not widen it without measuring.
   - `talent_tree`: `TraitDefinition` SpellID/VisibleSpellID on a live tree.
   - `talent`: `Talent.SpellRank_0..8`. `SpellID` is 0 on all 432 rows.
   - `item`: an `ItemSparse` item that is not a SoD item.
@@ -1047,8 +1055,15 @@ confirm it, and what would falsify it. **Resolve these before adding new ones**
 > checks when there is none, and checks #2 per ID against the client text.
 >
 > The parser reads these entries by regex. The first backticked `Field_…`
-> name, `Achievement` ID and `LightParams` ID in this section must stay the
-> finding's own values. Put new IDs *after* them.
+> name in this section must stay finding 4's own value. The first
+> `| ID | TimeEventID | Timestamp |` rows must stay finding 1's. Put new IDs
+> *after* them.
+>
+> **Cleaned up 2026-10-08.** #2 and the fixed parts of #5 moved to **Closed
+> findings** below, and `check_findings.py` no longer runs them. #5 is now
+> only the 75 Item stubs. Its check used to return RESOLVED when any one of
+> three cases cleared, so it read "Resolved" for a month while every stub
+> stayed in the client.
 
 ### 1. A weekly event schedule starting 12 October 2026
 
@@ -1064,62 +1079,27 @@ three rows:
 Exactly 7 days apart, sequential event IDs, same region group (5). 17:00 UTC is
 Blizzard's usual test-window slot.
 
-**Watch:** whether the dates shift, whether a fourth row appears (extending the
-cadence), and whether the table ships populated in the client rather than
+**Watch:** whether the dates shift, whether a fourth row appears (extending
+the cadence), and whether the table ships populated in the client rather than
 arriving by hotfix. A shifted date means the schedule slipped; a fourth row
 means the cadence is ongoing rather than a three-week run.
 
-**70009:** still empty (204) in the client, and **absent from the live
-overlay too**. The 70009 overlay has no `TimeEventData` rows, and push 112079
-is not among its two real pushes. `check_findings.py` reports FALSIFIED.
-Read that as "not live on this build", not "cancelled". Hotfixes do not
-carry across builds (see **Key facts**), so the rows may be re-pushed for
-70009 later. The first date, 12 October, is still in the future.
+**Status at 70291 (2026-10-08): not live on any build since 69977.**
+`check_findings.py` reports FALSIFIED: the table is empty in the client and
+in the live overlay.
 
-**Watch:** whether a later 70009 wave re-pushes the three rows, and with the
-same timestamps.
+| Build | Client | Live overlay | Overlay captured |
+|---|---|---|---|
+| 70009 | empty | empty; push 112079 not among its pushes | mid-session, lower bound |
+| 70170 | empty | empty | client closed |
+| 70245 | empty | empty | client closed |
+| 70291 | empty | empty | client closed |
 
-**70170 (2026-10-02):** still empty in the client and in the live overlay,
-and `check_findings.py` still reports FALSIFIED. This time the overlay was
-captured with the client closed, so it is not a lower bound. Push 112079 is
-not among the build's five real pushes. That makes two builds without the
-schedule. The first date, 12 October, is ten days out.
-
-**70245 (2026-10-07):** still empty in the client and live, with the
-overlay captured client-closed. That is three builds without it, and the
-first date is five days out.
-
-### 2. A shard/world mechanic being repositioned — RESOLVED at 70009 (shipped)
-
-Three `GlobalStrings` rows changed under one push (112128), all the same rename:
-
-```
-60077  "Transfer Now"                                  -> "Refresh Now"
-60078  "Your character will be transferred to another  -> "The world around you will
-        shard in %s %s."                                   refresh in %s %s. ..."
-60175  "Transfer to a new shard now."                  -> "Refresh the world now."
-```
-
-Nothing else in `GlobalStrings` changed. This is user-facing wording for a live
-mechanic being settled *after* the build shipped, which suggests the system
-itself is still being positioned.
-
-**Watch:** supporting UI strings using "refresh" language, new tables or columns
-for the mechanic, and whether "shard" wording survives anywhere. If the rename
-is cosmetic, expect nothing further; if the mechanic is being reworked, expect
-more strings and possibly a new table.
-
-**Resolved 2026-09-24 against 1.60.1.70009.** All three rows now carry the
-"refresh" wording in the **client** DB2. 69977's client still had "Transfer
-Now" / "…transferred to another shard…". The hotfix was the rename landing
-early, not a trial. The **cosmetic** reading won: no further "refresh"
-strings arrived, and 26 strings with "shard" in them survive in both builds.
-The same build did add ruleset wording that belongs to the same
-server-partitioning family. `SUPER_DISTRICT_TITLE` went from "Choose Your
-Gameplay Style" to "Choose Your Gameplay Ruleset", and
-`SUPER_DISTRICT_DESCRIPTION` now reads "You will only be able to interact
-with players who choose the same ruleset." That is a separate system, not
-evidence for this finding. Close it out at the next cleanup.
+Read FALSIFIED as "not live on this build", not "cancelled". Hotfixes do not
+carry across builds (see **Key facts**), so the rows could be re-pushed.
+**Decide after 2026-10-12 17:00 UTC.** If the first recorded date passes
+with the table still empty, close this as falsified. If rows reappear, check
+whether the timestamps match.
 
 ### 3. The vanilla PvP rank ladder arrived by bulk injection
 
@@ -1189,44 +1169,26 @@ every `sync_refs.py` run.
 **70009:** WoWDBDefs merged the build (`cf84e01`). The column is still
 unnamed, and `mapping.dbdm` still has no entry for it. Unchanged.
 
-### 5. Three open retail-contamination cases — PARTLY RESOLVED at 70009
+### 5. 75 retail Item stubs still in the shipped client
 
-See the section above for evidence. All three are open as of 1.60.1.69913:
+75 `Item` stubs (ClassID 4 / SubclassID 0, no `ItemSparse` row) are retail
+contamination: the IDs are listed under **Retail contamination**. They were
+removed by hotfix on 69913 and 69977 (push 112078 removed 71 of them live), and
+**every one of them has stayed in the shipped client** through 70291.
 
-| Record | Status |
-|---|---|
-| `Achievement` 9275 (Warlord Zaela, WoD) + category 15233 | removed by hotfix, still in the shipped client |
-| `LightParams` 453 (map 3064) | replaced by hotfix, still in the shipped client |
-| 75 `Item` stubs (ClassID 4 / SubclassID 0) | removed by hotfix, still in the shipped client |
+**Live, the removal lapsed.** In the 70009 overlay push 112078's removal does
+not apply, and all 75 are present live as well as in the client. The fixes
+that mattered moved into the client (see #5 under **Closed findings**). The
+one that stayed a hotfix lapsed with the build. That is the per-build overlay
+rule under **Key facts** at work.
 
-Each was pruned *live* but remains in the client data, so the question is
-whether 1.60.2 ships without them.
+**Status at 70291 (2026-10-08): UNRESOLVED.** All 75 recorded IDs are still
+in the client.
 
-**Watch:** whether each is gone from the shipped DB2s in the next build — that
-confirms the hotfix was a stopgap ahead of a real fix — and whether new
-contamination appears. `scripts/contamination.py` reports this automatically;
-a *new* HIGH-confidence finding is the thing to look at.
-
-**Checked against the 1.60.1.70009 client (2026-09-24):**
-
-| Record | 70009 client |
-|---|---|
-| Achievement 9275 + category 15233 | **gone. Confirmed: the hotfix was a stopgap** |
-| LightParams 453 | **Kalimdor fix shipped**: Light 269 carries 7641, as the hotfix did. The row itself survives, used only by the retail-map Light 16161 |
-| 75 Item stubs | **all 75 still present** |
-
-Two of the three are fixed, at least for the use that mattered in 453's
-case. The 75 stubs are what is left to watch. The same build also pulled
-AreaTable 16870 (map 3049), the Development Land map, and a second
-light case (495, see **Known cases**). The contamination rule itself had to
-change for 70009; see **Retail contamination**.
-
-**Live, the item stubs regressed.** On 69977, 71 of the 75 stubs were
-removed live by push 112078. In the 70009 overlay that removal does **not**
-apply, and all 75 are present live as well as in the client. The fixes that
-matter moved into the client (Zaela, the 453 use). The one that stayed a
-hotfix lapsed with the build. That is the per-build overlay rule under **Key
-facts** at work.
+**Watch:** whether any are gone from the shipped `Item` DB2. A partial prune
+is reported with the IDs that went. `scripts/contamination.py` still reports
+new contamination automatically; a *new* HIGH-confidence finding is the thing
+to look at.
 
 ### 6. The encrypted-count detector — TESTED at 70009, and it moved
 
@@ -1513,6 +1475,59 @@ content. Nothing ties a specific encrypted section to these maps.
   disappear. If they do not, the rule has another hole.
 
 ---
+
+
+## Closed findings
+
+Resolved entries moved out of **Findings to verify** so `check_findings.py`
+stops re-checking them. Kept for the evidence. Numbers are the original ones.
+
+### 2. A shard/world mechanic being repositioned — CLOSED 2026-10-08 (shipped at 70009)
+
+Three `GlobalStrings` rows changed under one push (112128), all the same rename:
+
+```
+60077  "Transfer Now"                                  -> "Refresh Now"
+60078  "Your character will be transferred to another  -> "The world around you will
+        shard in %s %s."                                   refresh in %s %s. ..."
+60175  "Transfer to a new shard now."                  -> "Refresh the world now."
+```
+
+Nothing else in `GlobalStrings` changed. This is user-facing wording for a live
+mechanic being settled *after* the build shipped, which suggests the system
+itself is still being positioned.
+
+**Watch:** supporting UI strings using "refresh" language, new tables or columns
+for the mechanic, and whether "shard" wording survives anywhere. If the rename
+is cosmetic, expect nothing further; if the mechanic is being reworked, expect
+more strings and possibly a new table.
+
+**Resolved 2026-09-24 against 1.60.1.70009.** All three rows now carry the
+"refresh" wording in the **client** DB2. 69977's client still had "Transfer
+Now" / "…transferred to another shard…". The hotfix was the rename landing
+early, not a trial. The **cosmetic** reading won: no further "refresh"
+strings arrived, and 26 strings with "shard" in them survive in both builds.
+The same build did add ruleset wording that belongs to the same
+server-partitioning family. `SUPER_DISTRICT_TITLE` went from "Choose Your
+Gameplay Style" to "Choose Your Gameplay Ruleset", and
+`SUPER_DISTRICT_DESCRIPTION` now reads "You will only be able to interact
+with players who choose the same ruleset." That is a separate system, not
+evidence for this finding. Close it out at the next cleanup.
+
+### 5 (part). Achievement 9275 and LightParams 453 — CLOSED 2026-10-08 (fixed at 70009)
+
+Two of the three retail-contamination cases recorded on 69913 were removed by
+hotfix and stayed in the client until 1.60.1.70009 fixed them there:
+
+| Record | 69913 | 70009 client |
+|---|---|---|
+| Achievement 9275 (Warlord Zaela, WoD) + category 15233 | removed by hotfix, still in client | **gone. The hotfix was a stopgap** |
+| LightParams 453 (map 3064) | replaced by hotfix, still in client | **Kalimdor fix shipped**: Light 269 carries 7641, as the hotfix did. The row survives, used only by the retail-map Light 16161 |
+
+The same build also pulled AreaTable 16870 (map 3049, Development Land) and a
+second light case (495, see **Known cases**). The contamination rule itself
+changed for 70009; see **Retail contamination**. The third case, the Item
+stubs, is still open as finding #5.
 
 ## Key facts
 
