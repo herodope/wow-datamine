@@ -36,6 +36,11 @@ Three modes:
                     python scripts/extract_db2.py --build <b> --restart
                     python scripts/render_patchnotes.py --since <date>
 
+The build-diff page leads with a player edition from `player_notes.py`: a
+per-class summary, then class -> spec -> spell with Buff / Nerf / Change, the
+value before and after, and where the change came from, judged live against
+live. The table-level audit below it is unchanged, collapsed as an appendix.
+
 The build-diff page is usually sparse, and that is rendered as the result
 rather than padded out. 69876 -> 69913 changes 2 of 610 tables and every
 column that moves is unverified in WoWDBDefs, so the page says so plainly and
@@ -67,6 +72,7 @@ import config
 import contamination
 import enrich
 import diff_builds
+import player_notes
 import spell_reach
 from diff_hotfixes import (SYNTHETIC_PUSH_BASE, diff_table, fetch_hotfixes,
                            key_index, key_rows, load_csv, status_label)
@@ -578,6 +584,9 @@ def build_diff_model(from_build, to_build, e, manifest):
         # Who can get each changed spell. Reads spell_reach / sod_tags from
         # both builds' wow.db; "unavailable" renders as NOT MEASURED.
         "spells": spell_reach.classify_changes(results, from_build, to_build),
+        # Class -> spec -> spell, judged on live data either side. Leads the
+        # page; everything above stays as the data appendix.
+        "players": player_notes.build(from_build, to_build, unverified=e.unverified),
         "sections": [],
         "headline": [],
         "items_showcase": [],
@@ -678,6 +687,54 @@ pre{margin:0;padding:12px 16px;overflow-x:auto;white-space:pre;line-height:1.45;
 .stat .v{font-size:22px;font-weight:600}
 .stat .k{font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em}
 .del{color:var(--bad)} .add{color:var(--good)} .dim{color:var(--ink-faint)}
+.badge{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.03em;
+  padding:1px 8px;border-radius:99px;margin-right:8px;border:1px solid;vertical-align:1px}
+.badge.buff{color:var(--good);border-color:var(--good);background:rgba(158,206,106,.1)}
+.badge.nerf{color:var(--bad);border-color:var(--bad);background:rgba(247,118,142,.1)}
+.badge.change,.badge.tooltip{color:var(--warn);border-color:var(--warn);background:rgba(224,175,104,.08)}
+.badge.new{color:var(--accent);border-color:var(--accent);background:rgba(122,162,247,.1)}
+.badge.removed{color:var(--ink-faint);border-color:var(--line)}
+.stat.s-buff .v{color:var(--good)} .stat.s-nerf .v{color:var(--bad)}
+.stat.s-change .v{color:var(--warn)} .stat.s-new .v{color:var(--accent)}
+.know{display:grid;gap:8px;margin:8px 0 24px}
+.krow{display:grid;grid-template-columns:110px 1fr;gap:12px;background:var(--panel);
+  border:1px solid var(--line);border-radius:8px;padding:10px 14px;font-size:14px}
+.kc{font-weight:600;text-decoration:none}
+details.cls>summary{font-size:15px;color:var(--ink)}
+.cn{font-weight:700;margin-right:8px}
+.cnt{font-size:12px;margin-right:6px;color:var(--ink-dim)}
+.cnt.buff{color:var(--good)} .cnt.nerf{color:var(--bad)} .cnt.new{color:var(--accent)}
+.cnt.change{color:var(--warn)}
+.entry{border-left:3px solid var(--line);padding:8px 0 8px 12px;margin:8px 0}
+.entry.v-buff{border-color:var(--good)} .entry.v-nerf{border-color:var(--bad)}
+.entry.v-change{border-color:var(--warn)} .entry.v-new{border-color:var(--accent)}
+.eh{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px}
+.nm{font-weight:600;font-size:15px;margin-right:8px}
+.ids{color:var(--ink-faint);font-size:11.5px}
+.chg{font-size:13.5px;margin:3px 0;color:var(--ink-dim);overflow-wrap:anywhere}
+.chg .lbl{color:var(--ink)}
+.chg.tech,.chg.tech .lbl{color:var(--ink-faint);font-size:12.5px}
+.rk{font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em}
+.was{color:var(--ink-faint);text-decoration:line-through;text-decoration-color:var(--ink-faint)}
+.now{font-weight:600;color:var(--ink)}
+.gone{color:var(--ink-faint);text-decoration:line-through} .now.up{color:var(--good)} .now.down{color:var(--bad)}
+.desc{font-size:13.5px;color:var(--ink-dim);margin:4px 0}
+.src{font-size:12px;color:var(--ink-faint);margin:4px 0 0}
+.prov.hotfix{font-size:10.5px;color:var(--warn);border:1px solid var(--warn);
+  border-radius:4px;padding:0 4px;margin-left:6px}
+details.tip{background:transparent;border:none;margin:4px 0}
+details.tip>summary{padding:2px 0;font-size:13px}
+details.tip[open]>summary{border-bottom:none}
+.tipbody{padding:4px 0 4px 12px}
+.tipbody .was,.tipbody .now{font-size:13px;margin:4px 0;font-weight:400}
+.tipbody .was{text-decoration:none}
+.tipbody .was::before{content:"Before: ";color:var(--ink-faint)}
+.tipbody .now::before{content:"After: ";color:var(--ink-faint)}
+button{background:var(--panel-2);color:var(--ink-dim);border:1px solid var(--line);
+  border-radius:6px;padding:2px 10px;font:inherit;font-size:12px;cursor:pointer}
+details.appendix>summary{font-size:15px;color:var(--ink)}
+@media(max-width:600px){.krow{grid-template-columns:1fr;gap:4px}
+  table{display:block;overflow-x:auto;max-width:100%}}
 footer{margin-top:56px;padding-top:16px;border-top:1px solid var(--line);
   font-size:12px;color:var(--ink-faint)}
 @media(max-width:600px){.wrap{padding:20px 12px 64px}h1{font-size:21px}}
@@ -1054,8 +1111,10 @@ def render_build_diff(m, e):
          FAVICON, f"<style>{CSS}</style></head><body><div class='wrap'>"]
 
     L.append(f"<h1>{esc(m['from_build'])} &rarr; {esc(m['to_build'])}</h1>")
-    L.append("<p class='sub'>Shipped client against shipped client. No hotfix "
-             f"overlay on either side. Generated {esc(now)}.</p>")
+    L.append("<p class='sub'>Class notes compare what players had against what "
+             "they have now, client plus hotfixes on both sides. The data appendix "
+             "compares shipped client against shipped client, with no overlay. "
+             f"Generated {esc(now)}.</p>")
 
     L.append('<div class="stats">')
     for k, v in (("Tables changed", changed), ("Byte-identical", unchanged),
@@ -1063,6 +1122,18 @@ def render_build_diff(m, e):
         L.append(f'<div class="stat"><div class="v">{v:,}</div>'
                  f'<div class="k">{esc(k)}</div></div>')
     L.append("</div>")
+
+    # --- player edition first, then the audit -----------------------------
+    L.append(render_player_edition(m["players"]))
+    # Contamination stays outside the appendix: a not_scanned verdict must be
+    # as prominent as a finding, never folded away.
+    L.append(render_contamination(m["contamination"]))
+    L.append('<h2 id="data">Data appendix</h2>')
+    L.append("<p class='sub'>The audit: every changed table, file and spell row, "
+             "shipped client against shipped client with no hotfix overlay. The "
+             "class notes above are built from the same databases.</p>")
+    L.append("<details class='appendix'><summary>Show the data</summary>"
+             "<div class='details-body'>")
 
     # --- the sparseness, stated -------------------------------------------
     pct = (100.0 * unchanged / m["table_count"]) if m["table_count"] else 0
@@ -1148,8 +1219,6 @@ def render_build_diff(m, e):
 
     L.append(render_spell_groups(m["spells"]))
 
-    L.append(render_contamination(m["contamination"]))
-
     # --- per-table detail --------------------------------------------------
     if m["results"]:
         L.append('<h2 id="tables">Changed tables</h2>')
@@ -1212,11 +1281,202 @@ def render_build_diff(m, e):
                          f"<td class='mono'>{esc(', '.join(c['cols_removed'])) or '—'}</td></tr>")
             L.append("</tbody></table>")
 
-    L.append("<footer>Shipped-vs-shipped. Unverified columns are marked and show "
+    L.append("</div></details>")
+    L.append("<footer>Class notes: live against live. Data appendix: shipped-vs-shipped. Unverified columns are marked and show "
              "raw values only. Self-contained — no external requests. Generated by "
              "<code>scripts/render_patchnotes.py</code>.</footer>")
     L.append("</div></body></html>")
     return "\n".join(x for x in L if x)
+
+
+PROVENANCE = {
+    player_notes.CLIENT: ("client", "Shipped in the client"),
+    player_notes.HOTFIX: ("hotfix", "Live hotfix, not in the client"),
+}
+# Classes a player reads first. Items and the catch-all render collapsed: at
+# 70170 they held 192 of 341 entries, most of them tooltip rewrites.
+COLLAPSED_CLASSES = {"Items", "Professions & other"}
+ENTRY_LINES = 12
+
+
+def _badge(verdict):
+    return (f"<span class='badge {esc(verdict)}'>"
+            f"{esc(player_notes.VERDICT_TITLES[verdict])}</span>")
+
+
+def _rank_span(ranks):
+    """'Rank 2', 'Ranks 1–5', or '' when the spell has no rank text."""
+    nums = [player_notes._rank_no(r) for r in ranks if r]
+    if not nums:
+        return ""
+    if len(nums) == 1:
+        return f"Rank {nums[0]}"
+    lo, hi = min(nums), max(nums)
+    return f"Ranks {lo}–{hi}" if hi - lo + 1 == len(nums) else "Ranks " + ", ".join(map(str, nums))
+
+
+def _entry_lines(e):
+    """Change lines for one spell, identical lines across ranks merged."""
+    merged, order = {}, []
+    for r in e["ranks"]:
+        for c in r["changes"]:
+            k = (c["label"], c["before"], c["after"], c["provenance"])
+            if k not in merged:
+                merged[k] = {"change": c, "ranks": []}
+                order.append(k)
+            merged[k]["ranks"].append(r["rank"])
+    many = len(e["ranks"]) > 1
+    out = []
+    for k in order:
+        c, ranks = merged[k]["change"], merged[k]["ranks"]
+        span = _rank_span(ranks) if many else ""
+        out.append((c, span))
+    # numbers first, then technical, then text
+    out.sort(key=lambda x: (x[0]["text"], bool(x[0]["technical"] or x[0]["cosmetic"])))
+    return out
+
+
+def _render_change(c, span, mixed=True):
+    pre = f"<span class='rk'>{esc(span)}</span> " if span else ""
+    # Tag single lines only when the entry mixes client and hotfix changes;
+    # otherwise the entry's source line already says it once.
+    hot = (" <span class='prov hotfix'>hotfix</span>"
+           if mixed and c["provenance"] == player_notes.HOTFIX else "")
+    if c["text"]:
+        verb = "added" if not c["before"] else "removed" if not c["after"] else "reworded"
+        return (f"<details class='tip'><summary>{pre}{esc(c['label'])} {verb}{hot}"
+                f"</summary><div class='tipbody'><p class='was'>{esc(c['before'])}</p>"
+                f"<p class='now'>{esc(c['after'])}</p></div></details>")
+    arrow = {1: "up", -1: "down"}.get(c["direction"], "")
+    cls = "chg tech" if (c["technical"] or c["cosmetic"]) else "chg"
+    if c["before"] == "—":          # a row or value that appeared
+        value = f"<span class='now'>{esc(c['after'])}</span>"
+    elif c["after"] == "—":         # one that went away
+        value = f"<span class='gone'>{esc(c['before'])}</span>"
+    else:
+        value = (f"<span class='was'>{esc(c['before'])}</span> → "
+                 f"<span class='now {arrow}'>{esc(c['after'])}</span>")
+    sep = ": " if c["before"] == "—" or c["after"] == "—" else " "
+    return (f"<div class='{cls}'>{pre}<span class='lbl'>{esc(c['label'])}</span>{sep}"
+            f"{value}{hot}</div>")
+
+
+def _render_entry(e):
+    ids = ", ".join(str(i) for i in sorted(e["spell_ids"])[:6])
+    if len(e["spell_ids"]) > 6:
+        ids += f" +{len(e['spell_ids']) - 6}"
+    L = [f"<div class='entry v-{esc(e['verdict'])}'>"
+         f"<div class='eh'>{_badge(e['verdict'])}<span class='nm'>{esc(e['name'])}</span>"
+         f"<span class='ids mono'>{esc(ids)}</span></div>"]
+    if e["verdict"] in (player_notes.NEW, player_notes.REMOVED):
+        if e.get("tooltip"):
+            L.append(f"<p class='desc'>{esc(e['tooltip'])}</p>")
+    else:
+        lines = _entry_lines(e)
+        mixed = len(e["provenance"]) > 1
+        for c, span in lines[:ENTRY_LINES]:
+            L.append(_render_change(c, span, mixed))
+        if len(lines) > ENTRY_LINES:
+            L.append(f"<details class='tip'><summary>{len(lines) - ENTRY_LINES} more "
+                     "change(s)</summary><div class='tipbody'>"
+                     + "".join(_render_change(c, s, mixed) for c, s in lines[ENTRY_LINES:])
+                     + "</div></details>")
+    provs = sorted(e["provenance"])
+    if provs:
+        L.append("<p class='src'>" + " · ".join(
+            PROVENANCE[p][1] for p in provs if p in PROVENANCE) + "</p>")
+    L.append("</div>")
+    return "".join(L)
+
+
+def render_player_edition(pm):
+    """Summary, then class -> spec -> spell. The reading a player wants."""
+    if pm.get("status") != "ok":
+        return ('<div class="banner warn"><h4>Player edition not built</h4><p>'
+                + esc(pm.get("reason") or "player_notes unavailable")
+                + ". The data appendix below is complete; run build_db.py for "
+                "both builds.</p></div>")
+    T = pm["totals"]
+    L = ['<h2 id="summary">Summary</h2>', '<div class="stats">']
+    for k, label in ((player_notes.BUFF, "Buffs"), (player_notes.NERF, "Nerfs"),
+                     (player_notes.CHANGE, "Changes"), (player_notes.NEW, "New"),
+                     (player_notes.REMOVED, "Removed")):
+        L.append(f'<div class="stat s-{k}"><div class="v">{T.get(k, 0):,}</div>'
+                 f'<div class="k">{label}</div></div>')
+    L.append(f'<div class="stat"><div class="v">{pm["talent_value_changes"]:,}</div>'
+             '<div class="k">Talent values</div></div></div>')
+
+    if not pm["overlay_measured"]["to"]:
+        L.append('<div class="note"><strong>Live hotfixes on '
+                 f"{esc(pm['to_build'])} were not measured.</strong> Its overlay "
+                 "equals the shipped client, so everything below is the client. A "
+                 "change Blizzard made live is missing here, not absent. Log in, "
+                 "log out and re-extract to measure it.</div>")
+    if pm["folded_total"]:
+        L.append(f'<div class="note"><strong>{pm["folded_total"]:,} spell(s) changed in '
+                 "the client only because an earlier hotfix was baked in.</strong> "
+                 "Players already had these. They are left out of the counts and "
+                 "listed per class under <em>Already live</em>.</div>")
+
+    heads = [c for c in pm["classes"]
+             if c["headline"] and c["name"] not in COLLAPSED_CLASSES]
+    if heads:
+        L.append('<h3>To know first</h3><div class="know">')
+        for c in heads:
+            bits = []
+            for e in c["headline"]:
+                what = e["highlight"][1]
+                tail = "" if what in ("new", "removed") else f": {esc(what)}"
+                bits.append(f"{_badge(e['verdict'])}<b>{esc(e['name'])}</b>{tail}")
+            L.append(f"<div class='krow'><a href='#c-{esc(c['name'].replace(' ', '-'))}' "
+                     f"class='kc'>{esc(c['name'])}</a><div>"
+                     + "<br>".join(bits) + "</div></div>")
+        L.append("</div>")
+
+    L.append('<h2 id="classes">Class by class</h2>')
+    L.append("<p class='sub'>What players had before against what they have now, both "
+             "live. <span class='badge buff'>Buff</span> and "
+             "<span class='badge nerf'>Nerf</span> are inferred from numbers whose "
+             "direction is unambiguous (values, costs, cooldowns, cast times, range, "
+             "duration, level); anything else is a "
+             "<span class='badge change'>Change</span>. Raw flags are dimmed: real, "
+             "not decoded. <button type='button' onclick=\"document.querySelectorAll("
+             "'details.cls').forEach(d=>d.open=true)\">Open all</button> "
+             "<button type='button' onclick=\"document.querySelectorAll("
+             "'details.cls').forEach(d=>d.open=false)\">Close all</button></p>")
+    for c in pm["classes"]:
+        n = sum(c["counts"].values())
+        chips = " ".join(f"<span class='cnt {k}'>{c['counts'][k]} "
+                         f"{esc(player_notes.VERDICT_TITLES[k].lower())}</span>"
+                         for k in player_notes.VERDICT_ORDER if c["counts"].get(k))
+        opened = "" if c["name"] in COLLAPSED_CLASSES else " open"
+        L.append(f"<details class='cls'{opened} id='c-{esc(c['name'].replace(' ', '-'))}'>"
+                 f"<summary><span class='cn'>{esc(c['name'])}</span> {chips}"
+                 + (f" <span class='dim'>· {len(c['folded'])} already live</span>"
+                    if c["folded"] else "")
+                 + "</summary><div class='details-body'>")
+        tips = []
+        for spec, entries in c["specs"].items():
+            shown = [e for e in entries if e["verdict"] != player_notes.TOOLTIP]
+            tips += [e for e in entries if e["verdict"] == player_notes.TOOLTIP]
+            if not shown:
+                continue
+            L.append(f"<h3>{esc(spec)}</h3>")
+            L.extend(_render_entry(e) for e in shown)
+        if tips:
+            L.append(f"<details class='tip'><summary>Tooltip only ({len(tips)})</summary>"
+                     "<div class='tipbody'>" + "".join(_render_entry(e) for e in tips)
+                     + "</div></details>")
+        if c["folded"]:
+            L.append(f"<details class='tip'><summary>Already live, now in the client "
+                     f"({len(c['folded'])})</summary><div class='tipbody'><p class='dim'>"
+                     "Changed between the two clients, but identical in game: an "
+                     "earlier hotfix shipped into the client.</p><p>"
+                     + ", ".join(esc(f["name"]) for f in c["folded"]) + "</p></div></details>")
+        if not n and not c["folded"]:
+            L.append("<p class='dim'>No player-facing change.</p>")
+        L.append("</div></details>")
+    return "\n".join(L)
 
 
 def render_contents(cd):
