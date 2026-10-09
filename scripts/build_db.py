@@ -279,6 +279,21 @@ def main(argv=None):
         log(f"    {n_tables} table(s) loaded, "
             f"{sum(v['rows'] for v in loaded.values() if v['source'] == sub):,} rows")
 
+    # Push IDs, from extract_db2.py's hotfixes.csv, so attribution is
+    # queryable without WTL running. Cumulative across every build WTL has
+    # read, and `build` is where a record was FIRST seen. Absent on builds
+    # extracted before 2026-10-09 until `extract_db2.py --hotfix-records-only`.
+    hf = out_dir / "hotfixes.csv"
+    if hf.is_file():
+        with conn:
+            rows, _ncols = load_one(conn, "hotfixes", hf, ",")
+        if rows:
+            loaded["hotfixes"] = {"rows": rows, "columns": _ncols, "source": "hotfixes.csv"}
+            indexes += index_table(conn, "hotfixes")
+            log(f"  hotfixes.csv -> hotfixes, {rows:,} record(s)")
+    else:
+        log("  hotfixes.csv absent: no hotfixes table (run extract_db2.py --hotfix-records-only)")
+
     # SoD tags: a snapshot-wide annotation over the live tables just loaded.
     # Log, don't crash -- a failure here must not cost the whole database, but
     # it must be loud, and _build_info records it so a missing sod_tags table

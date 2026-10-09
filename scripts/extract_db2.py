@@ -253,6 +253,46 @@ def extract_table(table, build, plain_dir, hotfixed_dir, layouthashes):
 # --- Checkpoint -------------------------------------------------------------
 
 
+HOTFIX_COLUMNS = ("pushID", "tableName", "recordID", "build", "status", "firstDetected")
+
+
+def save_hotfix_records(out_dir):
+    """WTL's hotfix record list -> out/<build>/hotfixes.csv. Returns a count or None.
+
+    `build_db.py` loads it as `hotfixes`, so push IDs are queryable without WTL
+    running: real pushes against synthetic IDs (base 1 << 24 + record ID),
+    status, and when WTL first saw each record.
+
+    The list is cumulative across every DBCache WTL has read, and `build` is
+    where WTL FIRST saw a record, not every build it applies to. Read it as
+    "push IDs WTL knows, as of this extract", never as one build's overlay.
+
+    A failure is logged and skipped: the table extraction is the irreplaceable
+    part, and this file can be rewritten later with --hotfix-records-only.
+    """
+    try:
+        st, body = get("/dbc/hotfixes/list", {"draw": 1, "start": 0, "length": 1})
+        total = json.loads(body).get("recordsTotal", 0) if st == 200 else 0
+        if not total:
+            log("  hotfixes.csv: WTL reports no hotfix records; not written")
+            return None
+        st, body = get("/dbc/hotfixes/list", {"draw": 1, "start": 0, "length": total})
+        rows = json.loads(body).get("data", []) if st == 200 else []
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        log(f"  hotfixes.csv: not written ({exc})")
+        return None
+    path = out_dir / "hotfixes.csv"
+    tmp = path.with_suffix(".csv.tmp")
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(HOTFIX_COLUMNS)
+        for r in rows:
+            w.writerow(r[:len(HOTFIX_COLUMNS)])
+    os.replace(tmp, path)
+    log(f"  hotfixes.csv: {len(rows):,} record(s) WTL knows across all builds")
+    return len(rows)
+
+
 def load_checkpoint(path):
     """Completed records from a previous run, keyed by table."""
     if not path.exists():
@@ -348,6 +388,8 @@ def main(argv=None):
     ap.add_argument("--tables", help="comma-separated subset; resolved against the build-filtered list")
     ap.add_argument("--workers", type=int, default=config.MAX_WORKERS)
     ap.add_argument("--allow-non-forever", action="store_true", help="skip the Forever build filter")
+    ap.add_argument("--hotfix-records-only", action="store_true",
+                    help="only (re)write out/<build>/hotfixes.csv from WTL's hotfix list")
     args = ap.parse_args(argv)
 
     started = time.monotonic()
@@ -369,6 +411,11 @@ def main(argv=None):
         raise SystemExit(2)
 
     out_dir = config.build_out_dir(build)
+    if args.hotfix_records_only:
+        if not out_dir.is_dir():
+            log(f"no {out_dir}; extract the build first")
+            raise SystemExit(2)
+        return 0 if save_hotfix_records(out_dir) is not None else 1
     plain_dir = out_dir / "db2"
     hotfixed_dir = out_dir / "db2_hotfixed"
     for d in (plain_dir, hotfixed_dir):
@@ -453,6 +500,7 @@ def main(argv=None):
 
     manifest = write_manifest(out_dir / "manifest.json", build, records, started, wtl_build)
     t = manifest["totals"]
+    save_hotfix_records(out_dir)
 
     log("")
     log(f"  ok            {t['ok']}")
