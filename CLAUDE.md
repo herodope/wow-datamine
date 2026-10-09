@@ -1209,101 +1209,6 @@ is reported with the IDs that went. `scripts/contamination.py` still reports
 new contamination automatically; a *new* HIGH-confidence finding is the thing
 to look at.
 
-### 6. The encrypted-count detector — TESTED at 70009, and it moved
-
-`inventory.py` compares the encrypted-file count against a hardcoded baseline
-of **5035** and prints `MATCH` or `DIFFERS`. It has now passed on three builds:
-
-| Build | files | encrypted | UnknownKey | ButNot | files.csv SHA-256 |
-|---|---|---|---|---|---|
-| 69876 | 1,441,771 | 5,035 | 3,371 | 1,664 | `86733ec34aee…` |
-| 69893 | 1,441,771 | 5,035 | 3,371 | 1,664 | `86733ec34aee…` |
-| 69913 | 1,441,771 | 5,035 | 3,371 | 1,664 | `86733ec34aee…` |
-
-**All three file sets are byte-identical**, so the detector has never been
-shown data that could make it fail. Three passes is one observation repeated
-three times. CLAUDE.md calls a drop in this count "one of the highest-value
-early signals" — on the evidence so far it is an **untested detector reporting
-MATCH**, which is precisely the category the identical-hash check in
-`inventory.py` was in until it was pointed at real data and turned out to fail
-on every correct run.
-
-A `MATCH` is only a measurement if the file set moved and the encrypted count
-did not. If neither moved, `MATCH` carries no information about encryption at
-all — it is restating that the build did not change.
-
-**The first real test is 1.60.2.** What to record when it lands:
-
-- whether `files.csv` differs from 69913's at all. If it does not, the
-  encrypted result is still untested and must be reported as such rather than
-  as a pass.
-- whether the encrypted total moved, and **which way**. A drop means keys
-  leaked or content unlocked; a rise means new encrypted content shipped.
-- the `EncryptedUnknownKey` / `EncryptedButNot` split separately from the
-  total. The two can move in opposite directions and cancel — 3,371 / 1,664
-  summing to 5,035 could become 3,300 / 1,735 with the total unchanged, and a
-  total-only check reports `MATCH` through a real key release.
-
-**Implemented 2026-09-20.** `inventory.py` now:
-
-- takes the baseline from the **previous extracted build's manifest**
-  (`previous_build()` / `baseline_from()`), not a constant. The comparison is
-  now "did this move since last time" rather than "does this still equal a
-  number someone typed in September".
-- reports the **file-set delta alongside** the encrypted count, hashing the
-  sorted FDID set rather than the whole file — a rename or a retype changes
-  the file without changing the set, and the set is what the question needs.
-- compares the `EncryptedUnknownKey` / `EncryptedButNot` split against the
-  previous build per status, so the two cannot move in opposite directions and
-  cancel unnoticed.
-- prints, when the file set did not move:
-
-  > NOTE: the encrypted-file count above is NOT a measurement this run.
-  > The file set did not move, so the count could not have moved either.
-
-  and records `encrypted_result_is_measurement` in the manifest so a report
-  can render the distinction without re-deriving it.
-
-At 1.60.1.69913 this correctly reads: `encrypted 5,035 (vs 5,035 in
-1.60.1.69893: MATCH)`, `file set unchanged`, followed by the NOTE. **The
-detector is still untested** — that does not change until a build arrives whose
-file set actually moves. 1.60.2 remains the first real test.
-
-**Resolved 2026-09-24: 1.60.1.70009 was the first real test.** It came as a
-1.60.1 build, not 1.60.2. The file set moved (1,441,771 → 1,441,610; +240
-added, −401 removed), so the count was a real measurement:
-
-| Status | 69977 | 70009 | Delta |
-|---|--:|--:|--:|
-| `EncryptedUnknownKey` | 3,371 | 3,385 | **+14** |
-| `EncryptedButNot` | 1,664 | 1,663 | −1 |
-| Total | 5,035 | 5,048 | +13 |
-
-The +14 accounts exactly:
-- **+7**: new unnamed files, FDIDs 8473060 and 8473797–8473802.
-- **+6**: DB2s that gained unknown-key sections: `Mount`, `MountXDisplay`,
-  `Vehicle`, `VehicleSeat`, `GlobalStrings` and
-  `CreatureDisplayInfoGeosetData`. These are hidden rows.
-- **+3 / −2**: files that moved between the two statuses.
-
-A new `TactKeyLookup` row, 8347, also shipped. It moved **up**, so new
-locked content shipped and no keys leaked. The per-status split was needed
-here: the two statuses moved in opposite directions.
-
-**The detector nearly failed silently on its first real test.**
-`extract_db2.py` rewrote `manifest.json` wholesale and erased the inventory
-section. Every hotfix-day re-extract did this, so 69913 and 69977 had none.
-`inventory.py` then printed "no previous build to compare against" for the
-encrypted count, while comparing the file set against 69977 on the next
-line. It was fixed on 2026-09-24:
-- `write_manifest()` now carries forward any key it does not own.
-- `baseline_from()` recomputes the baseline from the previous build's
-  `files.csv` when its manifest has no inventory section.
-
-Re-run, 70009 reads `encrypted 5,048 (vs 5,035 in 1.60.1.69977: DIFFERS)`.
-Close this finding out; the encryption table under **Baseline metrics**
-carries it forward.
-
 ### 7. A parallel Thunder Clap rank ladder at modern IDs
 
 `SpellName` holds 15 rows named "Thunder Clap". Two of them are complete R1–R6
@@ -1409,7 +1314,16 @@ withdrawn.
 `SkillLineAbility` rows point at 461810–461830. The ladder was not wired up,
 and not pruned either.
 
-### 8. Six `BroadcastText` rows arrived with no hotfix record — UNEXPLAINED
+**Re-checked 2026-10-09 against 70170, 70245 and 70291, client and live:
+unchanged. Still watch.** All six ladder ranks are present (461810,
+461826–461830) with zero `SkillLineAbility`, `ItemEffect` or
+`EffectTriggerSpell` references in every build. The cumulative hotfix list
+(`hotfixes` in `wow.db`) has no record on any spell table in 461800–461835,
+and `spell_reach` marks every rank unreachable. Two references in that ID
+range are **not** to the ladder, so do not count them: `ItemEffect` → 461833
+Sending Sigil (item 227451), and Pool of Fire 461062 → 461812 Pool of Fire, a trigger between two of its own IDs.
+
+### 8. Six `BroadcastText` rows arrived with no hotfix record — LIKELY CLIENT CACHE, test unrun
 
 The 2026-09-21 hotfix wave (no client patch; same `buildConfig`) added **11**
 rows to `BroadcastText`. `/dbc/hotfixes/list` accounts for **5** of them —
@@ -1465,7 +1379,25 @@ record is created. The test is still the one proposed there. Talk to a
 specific NPC whose row is absent, log out, re-extract, and check that the
 row appears with no push ID.
 
-### 9. Four Forever dungeons named, with their `Map` rows withheld (added 2026-09-24)
+**Re-checked 2026-10-09: strongly supported, still not proven.**
+
+| Build | Overlay-only `BroadcastText` rows | With no hotfix record | Of the six, live |
+|---|--:|--:|---|
+| 70170 | 17 | 17 | 2660, 8111, 8122 |
+| 70245 | 0 | 0 | none |
+| 70291 | 1 (10753 "Where would you like to fly to?") | 1 | none |
+
+The cumulative hotfix list holds exactly **6** `BroadcastText` records, all
+first seen on 69913. Not one overlay row on any later build has a record,
+and none of the six ever gained one. The count follows play, not builds: 17
+after a play session on 70170, then 0 on 70245, then a single flight-master
+greeting on 70291. That is the client caching NPC text as it meets the NPC,
+the same mechanism that moves `spell_reach` item roots (see **Current
+state**). It differs in one way: items are cached under a synthetic push ID,
+and `BroadcastText` is cached under none. The controlled test above is still
+unrun and would close this.
+
+### 9. Forever maps withheld: four named dungeons, plus unnamed 2974 (added 2026-09-24; 2974 on 2026-10-09)
 
 1.60.1.70009 added boss-kill statistics (`Achievement` category 14821) for
 instances that have **no `Map` row and no `AreaTable` rows** in the client:
@@ -1492,6 +1424,33 @@ content. Nothing ties a specific encrypted section to these maps.
 - whether `contamination.py` still labels them `withheld_map_ref` /
   `dangling_map_ref`. When the `Map` rows arrive, those hits should
   disappear. If they do not, the rule has another hole.
+
+**Re-checked 2026-10-09 against 70170, 70245 and 70291: still withheld,
+and growing.**
+- No `Map` row for any of the four, in client or live. `MapDifficulty` is
+  unchanged: 2994 and 3001 have two rows each, 2981 and 3052 none. All 7
+  boss statistics are still present.
+- **2981 gained data at 70291**, shipped in the client:
+  - `AreaTable` 17845 "Dreambound Pinnacle" (`DreamboundPinnacle`), with
+    `ContinentID` 2981.
+  - `Light` 17222 on 2981.
+
+  `contamination.py` labels both `dangling_map_ref` (MEDIUM), not
+  `withheld_map_ref`. That is the rule working as written: "withheld"
+  requires `MapDifficulty` rows on the map, and 2981 has none. So a
+  withheld map with no difficulty rows reads as dangling. Treat 2981's hits
+  as this finding, not as contamination. Record the area name raw. It does
+  not settle what 2981 is.
+- **A fifth withheld map, 2974.** It has no `Map` row and no achievement,
+  so it is unnamed. It does have:
+  - `MapDifficulty` 5941 (difficulty 1) and 6344 (difficulty 201), the same
+    pairing as 2994 and 3001.
+  - 3 `SoundEmitters` and 3 `TaxiPathNode` rows, so a flight path runs
+    across it.
+  - **25 `WorldChunkSounds` rows added at 70291** (721410–721437). Those
+    are the 25 `withheld_map_ref` LOW hits in the 70291 build diff.
+
+  Watch it with the other four.
 
 ---
 
@@ -1532,6 +1491,113 @@ Gameplay Style" to "Choose Your Gameplay Ruleset", and
 `SUPER_DISTRICT_DESCRIPTION` now reads "You will only be able to interact
 with players who choose the same ruleset." That is a separate system, not
 evidence for this finding. Close it out at the next cleanup.
+
+### 6. The encrypted-count detector — CLOSED 2026-10-09 (works; tracked under Baseline metrics)
+
+`inventory.py` compares the encrypted-file count against a hardcoded baseline
+of **5035** and prints `MATCH` or `DIFFERS`. It has now passed on three builds:
+
+| Build | files | encrypted | UnknownKey | ButNot | files.csv SHA-256 |
+|---|---|---|---|---|---|
+| 69876 | 1,441,771 | 5,035 | 3,371 | 1,664 | `86733ec34aee…` |
+| 69893 | 1,441,771 | 5,035 | 3,371 | 1,664 | `86733ec34aee…` |
+| 69913 | 1,441,771 | 5,035 | 3,371 | 1,664 | `86733ec34aee…` |
+
+**All three file sets are byte-identical**, so the detector has never been
+shown data that could make it fail. Three passes is one observation repeated
+three times. CLAUDE.md calls a drop in this count "one of the highest-value
+early signals" — on the evidence so far it is an **untested detector reporting
+MATCH**, which is precisely the category the identical-hash check in
+`inventory.py` was in until it was pointed at real data and turned out to fail
+on every correct run.
+
+A `MATCH` is only a measurement if the file set moved and the encrypted count
+did not. If neither moved, `MATCH` carries no information about encryption at
+all — it is restating that the build did not change.
+
+**The first real test is 1.60.2.** What to record when it lands:
+
+- whether `files.csv` differs from 69913's at all. If it does not, the
+  encrypted result is still untested and must be reported as such rather than
+  as a pass.
+- whether the encrypted total moved, and **which way**. A drop means keys
+  leaked or content unlocked; a rise means new encrypted content shipped.
+- the `EncryptedUnknownKey` / `EncryptedButNot` split separately from the
+  total. The two can move in opposite directions and cancel — 3,371 / 1,664
+  summing to 5,035 could become 3,300 / 1,735 with the total unchanged, and a
+  total-only check reports `MATCH` through a real key release.
+
+**Implemented 2026-09-20.** `inventory.py` now:
+
+- takes the baseline from the **previous extracted build's manifest**
+  (`previous_build()` / `baseline_from()`), not a constant. The comparison is
+  now "did this move since last time" rather than "does this still equal a
+  number someone typed in September".
+- reports the **file-set delta alongside** the encrypted count, hashing the
+  sorted FDID set rather than the whole file — a rename or a retype changes
+  the file without changing the set, and the set is what the question needs.
+- compares the `EncryptedUnknownKey` / `EncryptedButNot` split against the
+  previous build per status, so the two cannot move in opposite directions and
+  cancel unnoticed.
+- prints, when the file set did not move:
+
+  > NOTE: the encrypted-file count above is NOT a measurement this run.
+  > The file set did not move, so the count could not have moved either.
+
+  and records `encrypted_result_is_measurement` in the manifest so a report
+  can render the distinction without re-deriving it.
+
+At 1.60.1.69913 this correctly reads: `encrypted 5,035 (vs 5,035 in
+1.60.1.69893: MATCH)`, `file set unchanged`, followed by the NOTE. **The
+detector is still untested** — that does not change until a build arrives whose
+file set actually moves. 1.60.2 remains the first real test.
+
+**Resolved 2026-09-24: 1.60.1.70009 was the first real test.** It came as a
+1.60.1 build, not 1.60.2. The file set moved (1,441,771 → 1,441,610; +240
+added, −401 removed), so the count was a real measurement:
+
+| Status | 69977 | 70009 | Delta |
+|---|--:|--:|--:|
+| `EncryptedUnknownKey` | 3,371 | 3,385 | **+14** |
+| `EncryptedButNot` | 1,664 | 1,663 | −1 |
+| Total | 5,035 | 5,048 | +13 |
+
+The +14 accounts exactly:
+- **+7**: new unnamed files, FDIDs 8473060 and 8473797–8473802.
+- **+6**: DB2s that gained unknown-key sections: `Mount`, `MountXDisplay`,
+  `Vehicle`, `VehicleSeat`, `GlobalStrings` and
+  `CreatureDisplayInfoGeosetData`. These are hidden rows.
+- **+3 / −2**: files that moved between the two statuses.
+
+A new `TactKeyLookup` row, 8347, also shipped. It moved **up**, so new
+locked content shipped and no keys leaked. The per-status split was needed
+here: the two statuses moved in opposite directions.
+
+**The detector nearly failed silently on its first real test.**
+`extract_db2.py` rewrote `manifest.json` wholesale and erased the inventory
+section. Every hotfix-day re-extract did this, so 69913 and 69977 had none.
+`inventory.py` then printed "no previous build to compare against" for the
+encrypted count, while comparing the file set against 69977 on the next
+line. It was fixed on 2026-09-24:
+- `write_manifest()` now carries forward any key it does not own.
+- `baseline_from()` recomputes the baseline from the previous build's
+  `files.csv` when its manifest has no inventory section.
+
+Re-run, 70009 reads `encrypted 5,048 (vs 5,035 in 1.60.1.69977: DIFFERS)`.
+Close this finding out; the encryption table under **Baseline metrics**
+carries it forward.
+
+**Closed on 2026-10-09 at 70291.** The detector has moved correctly on every
+content build since. At 70291 the net change was `EncryptedUnknownKey` −36,
+but by file 48 left that status and 12 entered it:
+- 38 files became `EncryptedButNot`: unnamed `unk` files 8111042–8111134 and
+  8415656–8415739, plus two `.m2` files.
+- 10 are no longer encrypted at all. They include **`Vehicle.db2` and
+  `VehicleSeat.db2`**, two of the six DB2s that gained unknown-key sections
+  at 70009. (The build diff also shows `VehicleSeat` −1 row.)
+
+The same build's live overlay added 3 `TactKey` rows, 8341–8343. Nothing
+here links those keys to particular files.
 
 ### 5 (part). Achievement 9275 and LightParams 453 — CLOSED 2026-10-08 (fixed at 70009)
 
