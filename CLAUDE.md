@@ -171,11 +171,30 @@ Outstanding:
       live-only, and #5 still has all 75 stubs. #2 and the fixed parts of
       #5 moved to **Closed findings**. #5's old check called a partial fix
       RESOLVED.
-- [ ] **`spell_reach` drifts with the client's item cache.** 9,070 → 9,098
-      reachable at 70245 on identical client data. All +28 are `item` roots
-      (3,041 → 3,069), from 163 `ItemSparse` rows the client cached under
-      synthetic push IDs. Consider rooting items on shipped `ItemSparse`
-      plus real-push rows only.
+- [x] **`spell_reach` moves with the client's item cache. This is expected
+      behaviour, not a bug** (measured 2026-10-09). Reachability went from
+      9,070 to 9,098 at 70245 on identical client data. The gain is real
+      items the client saw and cached under synthetic push IDs: Gnomeregan
+      loot (Thermaplugg's Central Core, Vibroblade), Glutton's Cleaver,
+      Teebu's Blazing Longsword and others. The rule the to-do proposed was
+      "shipped `ItemSparse` plus real-push rows only". **It was tested and
+      rejected.** It cut 70170 from 9,070 to 8,861, because 4,381 live-only
+      rows have no real push, and those include in-game items at the cap:
+      Baron's Scepter, Bite of Serra'kis, Bloodspiller, Fiery War Axe. Read
+      the item-root count as "items this client has seen", a coverage floor
+      that grows with play. Comparing it across builds measures your play
+      as much as the build. Only a cache-independent "this item is in the
+      game" signal can make it stable, and the client has none: `Item`
+      rows exist for retail stubs and staged gear alike.
+- [x] **Push IDs are on disk** (2026-10-09). `extract_db2.py` writes
+      `out/<build>/hotfixes.csv` from `/dbc/hotfixes/list` after every
+      extract. `--hotfix-records-only` rewrites just that file. `build_db.py`
+      loads it as `hotfixes` (`pushID`, `tableName`, `recordID`, `build`,
+      `status`, `firstDetected`). The list is **cumulative** across every
+      DBCache WTL has read, and `build` is where a record was **first**
+      seen, not every build it applies to. Synthetic IDs are
+      `(1 << 24) + recordID`. Backfilled for 70058–70291, and all four
+      databases were rebuilt that day.
 
 ---
 

@@ -449,11 +449,16 @@ out/<version>.<build>/
 ├── db2/*.csv           plain DB2s, as shipped in the build
 ├── db2_hotfixed/*.csv  same tables with the hotfix overlay applied
 ├── gametables/*.txt    tab-separated per-level scaling curves
-├── hotfixes.csv        push IDs + changed rows from Cache/ADB/enUS
+├── hotfixes.csv        WTL's hotfix record list: push ID, table, record, status
 ├── files.csv           fdid, path, size, encrypted, content_type
 ├── wow.db              SQLite query surface over all of the above
 └── manifest.json       row counts, layouthashes, metrics
 ```
+
+`hotfixes.csv` is loaded into `wow.db` as `hotfixes`, so push IDs are
+queryable without WTL. It is cumulative across every cache WTL has read, and
+its `build` column is where WTL first saw a record. Rewrite it alone with
+`extract_db2.py --build <version> --hotfix-records-only`.
 
 Each table in `manifest.json` resolves to one of `ok`, `empty`,
 `hotfix_only` (204 plain but populated by hotfixes), `not_in_build` or
