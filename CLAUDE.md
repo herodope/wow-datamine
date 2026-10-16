@@ -195,6 +195,49 @@ Outstanding:
       seen, not every build it applies to. Synthetic IDs are
       `(1 << 24) + recordID`. Backfilled for 70058–70291, and all four
       databases were rebuilt that day.
+- [x] **1.60.1.70425 (2026-10-16) is the fourth content build and the
+      largest so far.** 190 of 615 tables changed (+11,518 / −61,980 /
+      ~10,531 rows). There are 4 new tables: `CatalogShopGameTitleInfo`,
+      `Particulate`, `ParticulateSound` and `UIExpansionDisplayInfoIcon`.
+      Two schemas changed, as WoWDBDefs renames only: `SpellItemEnchantment`
+      and `SpellVisualMissile`. 26,257 files changed content (1,081 ADTs).
+      The file set moved +2,308 / −155. `WMOMinimapTexture` lost 61,073 rows,
+      which continues the 70291 retail strip.
+      - **Encryption +285** (5,056 → 5,341), of which **+248 are unknown
+        keys**. That is the largest unknown-key jump yet. 23 DB2s gained
+        unknown-key sections, among them `Toy`, `Emotes`,
+        `CharacterLoadout`, `UiModelScene*`, `SoundKit*` and
+        `CreatureSound*`. Alongside them: the pet models
+        `MurlocBabyThrall` and `AncientProtector_Pet` (four seasonal
+        variants), and new icons (`BabyFaerieDragon_Pink`, Fisherfolk
+        armor). The overlay adds 14 `TactKey` rows. Whether they unlock any
+        of this is **not measured**.
+      - **The overlay was measured** from a `DBCache.bin` with a
+        build-70425 header, written at 00:40 local with the client
+        **closed**. It has 44 tables and 25 real pushes. Notable pushes:
+        112695, a pushback rework of every "avoid interruption caused by
+        damage" talent ("chance to not lose casting time"); 112709,
+        Winter's Chill; 112641, a Zephras Isle "Wind Bridge" taxi node; and
+        a bulk injection of about 4.7k `ItemSparse` records.
+      - **534 spells gained `SpellMisc.Attributes_6` bit `0x200000`**, 292
+        of them player-reachable. Only 545 spells carry the bit at all. It
+        accounts for most of the 874 "player-facing" spell changes. Do not
+        decode it.
+      - New maps 3217 "Dalaran Skycuter" and 3218 "Mulgore Skycuter" are
+        `MapType` 3 with no WDT. Map 2995 "Hyjal Crater" goes from
+        `InstanceType` 4 to 0 and gains `AreaTable` 17852. Unreachable new
+        spells stage a gated Dalaran ("You are not yet permitted into the
+        city of Dalaran", a Kirin Tor banishment, and `[DNT]` teleports to
+        Dalaran, Ruins of Lordaeron, Hall of Thanes and Excavation Site).
+        They also stage a rogue finisher, Death Mark ranks 1–4, with no
+        `SkillLineAbility`.
+      - **`player_notes.py` false nerfs.** A passive aura whose
+        `DurationIndex` goes from 21 to 0 is read as "until cancelled →
+        none". That produced a false nerf on Item +AC Leg R1–R3, Natural
+        Armor and Fortitude of the Scourge. Curse of Recklessness is
+        labelled a nerf for losing its value-90 dummy effect, the vanilla
+        attack-power drawback. A spell family that only gains a rank is
+        labelled NEW, as Lava Burst and Mana Tide Totem are.
 
 ---
 
@@ -227,6 +270,7 @@ bound when looking for builds — it is a press date, not a data date.
 | 1.60.1 | 70170 | 2026-10-02 (captured) | `d3f2837397a016e380ea51c4e1e78d1d` | `032ffa3587e5f762df7c6ef823e17596` |
 | 1.60.1 | 70245 | 2026-10-07 (captured) | `0bf141260c698dfc9cb3b5b7947b78c3` | `f39eaf0d23ad9a0f85fdbfc2713d3ed3` |
 | 1.60.1 | 70291 | 2026-10-08 (captured) | `e8dd824cf6c3d96cd01f804ca2ea5a63` | `00df9e43531518b653a35289488c9bbb` |
+| 1.60.1 | 70425 | 2026-10-16 (captured) | `ea9c525eef74f1d682c00a8ef39a5d2b` | `fcab7fec2ccc6b8158b56b6938ec4551` |
 
 These hashes are the only way to reach a build after Blizzard rotates it off the
 live version list. Capture them every patch day, before anything else.
@@ -564,6 +608,8 @@ matters as much as the total; see finding #6):
 |---|--:|--:|--:|--:|
 | 69876 – 69977 | 1,441,771 | 5,035 | 3,371 | 1,664 |
 | **70009** | 1,441,610 | **5,048** | **3,385** | 1,663 |
+| 70291 | 1,248,803 | 5,056 | 3,354 | 1,702 |
+| **70425** | 1,250,956 | **5,341** | **3,602** | 1,739 |
 
 ### Known benign errors
 
@@ -1103,6 +1149,11 @@ the cadence), and whether the table ships populated in the client rather than
 arriving by hotfix. A shifted date means the schedule slipped; a fourth row
 means the cadence is ongoing rather than a three-week run.
 
+**Status at 70425 (2026-10-16): the close criterion below is met.** The table
+is still empty in the client and live, four days after the first recorded
+date. Closing it means moving this section to **Closed findings** and
+dropping the check from `check_findings.py`. That is not done yet.
+
 **Status at 70291 (2026-10-08): not live on any build since 69977.**
 `check_findings.py` reports FALSIFIED: the table is empty in the client and
 in the live overlay.
@@ -1451,6 +1502,16 @@ and growing.**
     are the 25 `withheld_map_ref` LOW hits in the 70291 build diff.
 
   Watch it with the other four.
+
+**Re-checked 2026-10-16 against 70425: still withheld.** None of the five
+has a `Map` row in the client or live. `MapDifficulty` and all 7 boss
+statistics are unchanged.
+- 3052 (Barrow Deeps) gained 6 rows in the new `Particulate` table,
+  2088–2095. Those are the 6 `dangling_map_ref` hits in the build diff.
+- 2974 gained `ZoneLight` 3191, the build diff's one `withheld_map_ref` LOW
+  hit.
+- Map 2995 "Hyjal Crater" is a **different** map from 2981 Hyjal Summit. It
+  has a `Map` row and a WDT, and 70425 moved it from `InstanceType` 4 to 0.
 
 ---
 
