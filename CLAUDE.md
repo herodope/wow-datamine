@@ -238,6 +238,44 @@ Outstanding:
         labelled a nerf for losing its value-90 dummy effect, the vanilla
         attack-power drawback. A spell family that only gains a rank is
         labelled NEW, as Lava Burst and Mana Tide Totem are.
+- [x] **1.60.1.70450 (2026-10-19) is a client-code build.** All 615
+      shipped DB2s are byte-identical to 70425. The file set
+      (1,250,956) and encryption (5,341) did not move. `/casc/diff` found
+      17 DLLs and no text changes. The benign-error FDID set is unchanged.
+      The overlay was measured the same day from a `DBCache.bin` with a
+      build-70450 header (0x11332), written at 17:26 local with the client
+      **closed**. The wave against 70425's overlay
+      (`hotfixwave_1.60.1.70450_since_1.60.1.70425.html`) moves 36 tables
+      and has 2,603 records under 40 real pushes. **Its baseline is 70425's
+      overlay of 10-16 00:40**, so pushes to 70425 after that capture are
+      folded in. Read it as "new since 10-16", not "new with 70450". The
+      page banner says "same buildConfig", which is wrong here. The diff
+      still holds because the DB2s are identical. Player-reachable changes:
+      - Holy Fire Rank 1 (14914): base points 58 → 54 (112833).
+      - Champion of the Light (talent, spell 1311084): `Curve` 110350
+        goes from 10/20/30 to 20/40/60 per rank (112842).
+      - Arcane Wrath ranks 1–4 (1326079–1326082) gain new `SpellCategory`
+        2601 with a 6 s category recovery (112845).
+      - Resurrection Sickness (15007): `SpellDuration` 427 goes from 60 s to
+        600 s (112793). It is the only spell on that duration index.
+      - `SpellShapeshiftForm.BonusActionBar` goes from 0 to 1/2/3 for
+        Battle, Defensive and Berserker Stance, and from 0 to 1 for
+        Stealth (112867).
+      - Missile Barrage, Bountiful Harvest and Silenced – Kick get
+        rewritten tooltips. Curse of Weakness, Curse of Exhaustion and Bane
+        of Agony tooltips move from `$s1` to `$w1`.
+      - Raw values only, do not decode: Curse of Exhaustion
+        `SpellClassMask[2]` 0 → 262144, Amplify Curse
+        `EffectSpellClassMask[0]` 33792 → 32768, and Faster Attack I–VII
+        gaining `Attributes[3]` bit 0x40000000.
+      - Unreachable: a new Mind Blast 1326990, `(DNT) Immol'thar Encounter
+        Record Aura` with `DungeonEncounter` 349 flags 1024 → 1152, Summon
+        Shield Guard and Summon Theurgist (`SummonProperties` 6926, duration
+        index 21 → 4), and Dark Inspiration `EffectAura` 80 → 137.
+      - Push 112864 is 2,047 records, mostly invalidations, and moves
+        almost no rows. 66 changed rows (64 `BroadcastText`) have no
+        hotfix record. 9 items get display data, and 31 `Item` rows are
+        withdrawn (the MEDIUM `orphan_removal` hit).
 
 ---
 
@@ -271,6 +309,7 @@ bound when looking for builds — it is a press date, not a data date.
 | 1.60.1 | 70245 | 2026-10-07 (captured) | `0bf141260c698dfc9cb3b5b7947b78c3` | `f39eaf0d23ad9a0f85fdbfc2713d3ed3` |
 | 1.60.1 | 70291 | 2026-10-08 (captured) | `e8dd824cf6c3d96cd01f804ca2ea5a63` | `00df9e43531518b653a35289488c9bbb` |
 | 1.60.1 | 70425 | 2026-10-16 (captured) | `ea9c525eef74f1d682c00a8ef39a5d2b` | `fcab7fec2ccc6b8158b56b6938ec4551` |
+| 1.60.1 | 70450 | 2026-10-19 (captured) | `84bea4233331e390fda8724c6f91ffa5` | `f065eade5276a5ac05606e60a4c5a1f7` |
 
 These hashes are the only way to reach a build after Blizzard rotates it off the
 live version list. Capture them every patch day, before anything else.
@@ -1507,7 +1546,7 @@ and growing.**
 has a `Map` row in the client or live. `MapDifficulty` and all 7 boss
 statistics are unchanged.
 - 3052 (Barrow Deeps) gained 6 rows in the new `Particulate` table,
-  2088–2095. Those are the 6 `dangling_map_ref` hits in the build diff.
+  2088 and 2091–2095. Those are the 6 `dangling_map_ref` hits in the build diff.
 - 2974 gained `ZoneLight` 3191, the build diff's one `withheld_map_ref` LOW
   hit.
 - Map 2995 "Hyjal Crater" is a **different** map from 2981 Hyjal Summit. It
