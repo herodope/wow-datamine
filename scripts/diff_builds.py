@@ -7,7 +7,7 @@ pushed last week as though it shipped in this patch. Client changes and live
 changes are different questions: `diff_hotfixes.py` answers the second.
 
 Per table: added, removed and changed rows with per-field before/after. Rows are
-keyed on the column named `ID` (never column 0 -- see Conventions in CLAUDE.md;
+keyed on the column named `ID` (never column 0 -- see docs/conventions.md;
 DBCD emits DBD-definition order and Achievement puts ID at index 3). Whether a
 table changed at all is decided by a content hash of the two files, not a row
 count, because a table can change values without changing its row count.

@@ -409,7 +409,7 @@ class Enricher:
     def mappings(self):
         """(table, column, arrIndex) -> mapping, from /dbc/meta/getMappings.
 
-        GOTCHA (CLAUDE.md, docs/wtl-api.md): `build` MUST be passed. Without
+        GOTCHA (docs/wtl-api.md): `build` MUST be passed. Without
         it, columns whose enum was re-versioned return both variants with the
         retail one first -- measured, 2 of 606 mappings collide that way, and
         `Weather::Type` comes back with values 0-5 twice, retail names ahead

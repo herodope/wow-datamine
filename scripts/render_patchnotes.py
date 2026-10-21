@@ -12,7 +12,7 @@ base64-inlined, there are no external stylesheets, fonts or scripts, and the
 file opens offline with WTL stopped. It is one file you can send someone.
 
 Three rules this renderer exists to enforce, all of them conventions recorded
-in CLAUDE.md:
+in docs/conventions.md:
 
   * A `not_scanned` contamination verdict is rendered as prominently as a
     finding, and **never** as "0 findings". Convention: an unscanned zero is

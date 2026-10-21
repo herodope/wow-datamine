@@ -8,16 +8,141 @@ inferred from URL patterns, and the marked routes were confirmed live against
 Base URL: `http://localhost:5080` (`config.WTL_URL`).
 
 **Every route here is marked ✅ measured or ⚠️ source-read**, per the
-convention in CLAUDE.md. ✅ means a live response confirmed the behaviour
-described, against `1.60.1.69913`. ⚠️ means the signature and logic were read
-from the controller but nothing has been sent — treat those as hypotheses and
-promote them after exercising them. The distinction is not pedantic: the
-`build=` rule on `/dbc/meta/getMappings` was source-read, committed as fact,
-and was backwards.
+convention in [conventions.md](conventions.md). ✅ means a live response
+confirmed the behaviour described, against `1.60.1.69913`. ⚠️ means the
+signature and logic were read from the controller but nothing has been sent —
+treat those as hypotheses and promote them after exercising them. The
+distinction is not pedantic: read from source alone, the `build=` rule on
+`/dbc/meta/getMappings` points the wrong way.
 
 WTL serves exactly one build at a time — the one it loaded at startup. The
 `build` parameter on most routes selects which *extracted-to-disk* copy to read;
 for the currently loaded build it reads from CASC directly.
+
+---
+
+## Gotchas: silently wrong output
+
+The rest of this file is the route reference. These are the traps
+that produce **silently wrong output** rather than an error. All measured
+against a live instance on 1.60.1.69913.
+
+- **The hotfix parameter is `useHotfixes=true` on API routes.** The browse page
+  URL spells it `hotfixes=` and rewrites it client-side before calling the API.
+  Sending `hotfixes=` to an API route binds nothing, returns **200**, and
+  silently yields non-hotfixed data — measured at **10,556 rows with
+  `useHotfixes=true` vs 6,622 without** on `itemsearchname`. **NEVER use the
+  page's spelling in scripts.** This is the failure that would fill
+  `db2_hotfixed/` with plain DB2 data and never report a problem.
+- **Iterate the build-filtered table list.** `/listfile/db2s` unfiltered returns
+  **1342** tables — everything WoWDBDefs defines. Build-filtered
+  (`?build=<version>`) returns **1161**. Use the filtered list or ~181 exports
+  come back empty.
+- **Two distinct DataTables envelope shapes exist.** `/dbc/info` and `/dbc/data`
+  carry an `error` key; `/dbc/hotfixes/list`, `/listfile/files` and
+  `/build/table` do **not** — reading `d["error"]` on those raises `KeyError`.
+  Use `.get("error")` for a single code path.
+- **204 and 404 mean different things.** `204 No Content` is
+  defined-but-zero-rows in this build (e.g. `modifiedcraftingitem`); `404` is
+  not in this build at all. Handle them distinctly — a 204 is not a failure.
+  **The two variants of a table can disagree:** a table can return 204 with
+  `useHotfixes` off but 200 with rows when on — it exists *only* as live
+  hotfix data and was never shipped in the client build. `extract_db2.py`
+  records this as `resolution: "hotfix_only"`, distinct from `empty`.
+  `TimeEventData` in 1.60.1.69913 is the reference case, and the only one in
+  1161 tables — which is exactly why it is easy to miss. Never decide a table
+  is empty from the plain request alone.
+- **`hotfix_delta` is computed from a content hash, not row counts.** Five
+  tables in 1.60.1.69913 — `GlobalStrings`, `Light`, `LightData`,
+  `LightDataGlobalVolumeFog`, `LightParams` — have **identical row counts in
+  both variants but different values**. A count-based comparison reports no
+  change for all five.
+- **`/dbc/hotfixes/list` returns zeros when given no query string.** It
+  short-circuits on `!Request.QueryString.HasValue`, so a bare request looks
+  like "no hotfixes exist". Always pass `?length=N`.
+- **Default locale on DB2 routes is `All_WoW`, not `enUS`.** Pass `locale`
+  explicitly rather than relying on the default.
+- **`type:unk` returns 0 despite 99,348 rows carrying that type.** The `type:`
+  search token looks up `Listfile.TypeMap`, which has **no `unk` bucket**, so
+  the lookup fails and the search falls through to a plain substring match on
+  filenames — matching nothing. The `content_type` column gets `unk` from a
+  separate `TryGetValue` fallback. Trusting the search token would report
+  nothing to classify when in fact 99,348 files needed it. Read the column,
+  never the token.
+- **`recordsFiltered == recordsTotal` proves NameMap *membership*, not a
+  non-empty name.** `/listfile/files` iterates `Listfile.NameMap`, so its
+  unfiltered `recordsFiltered` counts rows that are *in* the map — including
+  those whose name is the empty string. At 1.60.1.69913 both counts are
+  1,441,771, which reads as "nothing is unnamed", but 19,583 of those rows
+  carry an empty filename. **Count empty values in the filename column
+  (index 1); do not infer naming coverage from the two totals matching.**
+- **WTL exposes no per-file size over HTTP.** `/size/data` only aggregates
+  (`results[type] += fileSize`), and every other route works from
+  `Listfile.NameMap`, which carries no size. Real per-file sizes live in the
+  CASC indices and require parsing `Data/data/*.idx` directly — that is a
+  separate piece of work, not an API call. `files.csv` emits an empty `size`
+  column for schema stability.
+- **`/dbc/updateDefs` is the "Update WoWDBDefs & clear cache" button.** With our
+  local `definitionDir` it skips the download half and only does
+  reload-and-clear — which is exactly the half needed after `sync_refs.py` has
+  refreshed the clone on disk.
+- **Always pass `build=` to `/dbc/meta/getMappings`.** Without it, columns
+  whose enum was re-versioned return **both** variants and the retail one
+  comes first. Measured live on 1.60.1.69913: unfiltered, exactly 2 of 606
+  mappings carry colliding values — `Weather::Type` returns 12 entries for
+  values 0–5 (retail `0 None, 1 Clear, 2 Rain…` ahead of Classic
+  `0 Clear, 1 Rain, 2 Snow…`) and `SpellEffect::Effect` returns 361 with one
+  duplicate. A decoder taking the first match on value silently labels every
+  Forever weather row with **retail** names. With `build=1.60.1.69913`:
+  **0 colliding mappings and 0 empty ENUM/FLAGS mappings** — the filter is
+  what selects the Classic-era variant.
+
+  The mechanism constrains what the filter can do. `BuildRange.Contains`
+  compares **componentwise**, not lexicographically:
+  `major >= min.major && major <= max.major`. Forever is `1.60.1.69913`, so
+  `major = 60` fails `<= 12` against the `Vanilla` preset and `expansion = 1`
+  fails `>= 2` against every TBC-and-later preset. **A 1.60.x build matches no
+  preset range that exists**, so `build=` can only ever *drop* build-tagged
+  entries, never select one. That gives the right answer here only because the
+  era-specific variants are the tagged ones and the Classic defaults are
+  untagged — an authoring convention, not a guarantee. If a future definition
+  sync tags the Classic variant instead, the filter would strip it and leave
+  the column empty. **Re-run the collision check after every `sync_refs.py`:**
+  with `build=` set, no ENUM/FLAGS mapping should come back with zero entries.
+- **`output=png` on `/map/tile` is read only inside the `type == "adt"`
+  branch.** Every BLP falls through to the tail path, which unconditionally
+  returns `application/octet-stream` holding raw RGBA bytes — `targetSize ×
+  targetSize × 4`, no header — with a **200**. Requesting a PNG minimap tile
+  succeeds and yields something no image decoder will open. Use
+  `/casc/blp2png` for a PNG; use `/map/tile` only for pixels to composite.
+- **A 500 from WTL usually means bad input, not a dead server.**
+  `Startup.cs` registers `UseDeveloperExceptionPage` only under
+  `IsDevelopment()`, and there is no handler registered for any other
+  environment. `launchSettings.json` sets `ASPNETCORE_ENVIRONMENT=Development`,
+  so launching through `run-wtl.ps1` (`dotnet run`) **does** get the dev
+  exception page — a 500 arrives as `text/plain` with a stack trace, which is
+  worth reading. Run the built exe without that variable and the same throw
+  returns a bare 500 with an empty body instead. Either way the reason is
+  never a structured error field. `/casc/blp2png` on a non-BLP, `/dbc/tooltip/item` on a
+  `RandPropPoints` miss or unknown `SubclassID`, `/map/wdtMask` on an unknown
+  layer and `/map/download?layer=5` all reach it. Scripts must treat 500 as
+  possible bad input and keep going, not as "WTL is down" — probe
+  `/casc/buildname` to tell the two apart.
+- **`/casc/blp2png` 404s on encrypted files.** It reads the first four bytes
+  and returns `NotFound()` when all four are zero, which is exactly what a
+  file with a missing key decodes to. A 404 there means *unavailable*, not
+  *absent* — cross-check the `encryptionStatus` column on `/listfile/files`
+  before reporting a texture as missing from the build.
+- **The tooltip controller is non-hotfixed and cannot be pointed at another
+  build.** Every load is the two-argument `GetOrLoad(name, CASC.BuildName)`,
+  i.e. `useHotfixes: false`, with no parameter to change it.
+  (`FindRecords(…, true)` looks like a hotfix flag but that fifth argument is
+  `single`.) So `/dbc/tooltip/item/<id>` on any of the hotfix-only `ItemSparse`
+  additions falls through both `ItemSparse` and `ItemSearchName` and returns
+  `Name: "Unknown Item"`, `HasSparse: false` — a plausible-looking answer for
+  an item that exists. Anything hotfix-only must be read through
+  `/dbc/export`, `/dbc/data`, `/dbc/peek` or `/dbc/find` with
+  `useHotfixes=true`.
 
 ---
 
@@ -305,7 +430,7 @@ build.
 > Membership in `NameMap` is not the same as having a non-empty name —
 > **19,583** of those rows carry an empty filename. Count empty values in the
 > filename column (index 1); never infer naming coverage from the two totals
-> agreeing. CLAUDE.md records this under **Key facts**.
+> agreeing. [key-facts.md](key-facts.md) records this too.
 
 > **Trap: `type:unk` returns 0 despite 99,348 rows carrying that type.**
 > The `type:` search token looks up `Listfile.TypeMap` (`Listfile.cs:588`),
@@ -342,7 +467,7 @@ mistaken for a source of per-file sizes.
 > `?groupType=filetype` throws `ArgumentOutOfRangeException` from
 > `TACTSharp.EncodingInstance.FindContentKey`, wrapped in an
 > `AggregateException`. That is the **same exception as the ten known-benign
-> FDIDs** in CLAUDE.md's baseline metrics — the route walks every file and one
+> FDIDs** in [baseline-metrics.md](baseline-metrics.md) — the route walks every file and one
 > malformed encoding entry takes the whole request down, where the analysis
 > pass logs and continues. So on this build there is no working size route at
 > all, per-file or aggregate. `inventory.py` emitting an empty `size` column
@@ -565,7 +690,7 @@ Loaded 531 relations and 12 label columns
 
 The skip-download warning fires as expected, and definitions are reloaded from
 our local clone rather than fetched. The relations/label-column counts match
-CLAUDE.md's baseline metrics (531 / 12), so the reload reproduced the same
+[baseline-metrics.md](baseline-metrics.md) (531 / 12), so the reload reproduced the same
 state.
 
 Return string matches the source exactly. The count is **1342** — it comes from
@@ -847,11 +972,11 @@ SettingsManager.DefinitionDir + "/../meta/mapping.dbdm"
 
 With `definitionDir` pointed at `vendor/WoWDBDefs/definitions`, that resolves to
 `vendor/WoWDBDefs/meta/mapping.dbdm`, which the clone does ship. The fallback is
-**silent** — the same failure mode CLAUDE.md records for `definitionDir` itself.
+**silent** — the same failure mode [patch-day.md](patch-day.md) records for `definitionDir` itself.
 Confirm it from the numbers: the local file holds **606 mappings** (44 `COLOR`,
 297 `ENUM`, 265 `FLAGS`) referencing **354 distinct** definition files
 (169 `.dbde` + 187 `.dbdf` on disk). Those are the baseline metrics in
-CLAUDE.md, so a `getMappings` response that does not total 606 means WTL fell
+[baseline-metrics.md](baseline-metrics.md), so a `getMappings` response that does not total 606 means WTL fell
 back to BDBD.
 
 `MetaType` serialises as an **integer**: `FLAGS = 0`, `ENUM = 1`, `COLOR = 2`
@@ -1006,7 +1131,7 @@ Errors are returned as HTTP 200 with the message in `error`, like `/dbc/info`.
   definitions. `/dbc/relations/{foreignColumn}` narrows to one.
 - `/dbc/labelColumns` → a flat list of `Table::LabelID` columns.
 
-These are the 531 / 12 in CLAUDE.md's baseline metrics.
+These are the 531 / 12 in [baseline-metrics.md](baseline-metrics.md).
 
 > **`labelColumns` is not "the display name column per table".** ✅ measured:
 > it returns 12 entries, all of the form `SpellLabel::LabelID`,
@@ -1183,8 +1308,8 @@ Checked against a live WTL on `http://localhost:5080`, build `1.60.1.69913`,
    use their own nested classes. Corrected above.
 
 2. **1342 vs 1161 tables.** `/listfile/db2s` unfiltered returns every table
-   WoWDBDefs defines (1342 — matching the DBD count in CLAUDE.md's baseline
-   metrics); filtered by build it returns 1161. The 181-table gap is retail
+   WoWDBDefs defines (1342 — matching the DBD count in
+   [baseline-metrics.md](baseline-metrics.md)); filtered by build it returns 1161. The 181-table gap is retail
    tables absent from this Classic build. **Iterate the build-filtered list**,
    or ~181 exports will come back 204/404.
 

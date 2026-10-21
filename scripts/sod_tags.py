@@ -115,7 +115,7 @@ Detection, measured on 1.60.1.70009:
 
 Deliberately NOT signals: spell ID ranges, EffectAura=332 alone (510 spells,
 most not reached by any rune), AcquireMethod=3 alone, raw value scans, and
-"unreferenced" / "no display data" alone. See CLAUDE.md.
+"unreferenced" / "no display data" alone. See docs/sod-tags.md.
 
 Usage:
     python scripts/sod_tags.py                      # report for the newest build

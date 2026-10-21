@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the CLAUDE.md patch-day checklist end to end.
+"""Run the docs/patch-day.md checklist end to end.
 
 Steps 1-2 are yours (let Battle.net finish, launch the client once so the CASC
 index is complete, then close WoW and idle Battle.net). This script starts at
@@ -399,7 +399,7 @@ def main(argv=None):
 
     started = time.monotonic()
     log(BANNER)
-    log("PATCH DAY -- CLAUDE.md checklist" + ("  [DRY RUN]" if args.dry_run else ""))
+    log("PATCH DAY -- docs/patch-day.md checklist" + ("  [DRY RUN]" if args.dry_run else ""))
     log(f"  {datetime.now(timezone.utc).replace(microsecond=0).isoformat()}")
     log(BANNER)
     log("")

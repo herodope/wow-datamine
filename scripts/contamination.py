@@ -350,7 +350,7 @@ def _orphan_removal(result, ref, load_table):
 # Every rule here is narrow, and two of the four are pinned to a single table
 # by name. applicability() states that up front so a zero can be told apart
 # from data no rule could read. See "an unscanned zero is not a clean result"
-# in CLAUDE.md.
+# in docs/conventions.md.
 def applicability(result):
     """[(rule, applicable, why)] for one diff result."""
     table = result.get("table", "")

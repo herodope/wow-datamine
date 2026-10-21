@@ -318,13 +318,11 @@ def fdid_set_sha(csv_path):
 def check_distinct_inventories(csv_path, build):
     """Warn when another build's files.csv is byte-identical to this one.
 
-    A warning, not a failure. It was written as a hard failure on the
-    assumption that identical hashes meant the extraction had stopped being
-    build-specific. Measured: they had not. Builds 69876, 69893 and 69913
-    genuinely share one file set -- only 2 of 610 shipped DB2 tables differ
-    across all three -- so the check failed on correct data every time it ran.
-    See the "a fix that works does not confirm the diagnosis" convention in
-    CLAUDE.md.
+    A warning, not a failure: identical hashes do not mean the extraction
+    stopped being build-specific. Builds 69876, 69893 and 69913 genuinely
+    share one file set -- only 2 of 610 shipped DB2 tables differ across all
+    three -- so a hard failure here fires on correct data. See the "a fix that
+    works does not confirm the diagnosis" convention in docs/conventions.md.
 
     It still earns its place, because the failure mode it describes is real
     and has no other symptom: if the `showAllFiles` setting is turned on,
@@ -630,7 +628,7 @@ def main(argv=None):
         log("  NOTE: the encrypted-file count above is NOT a measurement this run.")
         log("  The file set did not move, so the count could not have moved either;")
         log("  a MATCH here restates that the build is unchanged and says nothing")
-        log("  about encryption. See Baseline metrics in CLAUDE.md.")
+        log("  about encryption. See docs/baseline-metrics.md.")
     log(f"  {section['durationSeconds']}s -> {csv_path}")
 
     check_distinct_inventories(csv_path, build)

@@ -30,8 +30,8 @@ them with the patch-day sequence below; the writers create the directory
 themselves, so a fresh clone needs no setup.
 
 > `CLAUDE.md` is the project's working context, written for Claude Code — locked
-> decisions, conventions, and known traps. It is long
-> and reference-shaped. This file is the operational how-to; start here.
+> decisions and the short form of the conventions. The reference material it
+> points to lives in `docs/`. This file is the operational how-to; start here.
 
 ---
 
@@ -393,7 +393,7 @@ read-only over stdio, so an MCP client can ask questions without shelling out
 to `query.py`. Four tools: `list_tables`, `describe_table`, `query`,
 `get_conventions`. It is the one thing in the repo needing
 `pip install -r requirements.txt`. Setup instructions are in its module
-docstring and in `CLAUDE.md`.
+docstring and in [`docs/repo-layout.md`](docs/repo-layout.md#mcp-server).
 
 Read-only is enforced by the driver, not by inspecting SQL: the connection is a
 `file:...?mode=ro` URI and `ATTACH` is denied by an authorizer, so a query
@@ -591,7 +591,7 @@ reimplementing the check.
 ```
 builds.json    manifest index, keyed by buildId — the unrecoverable bit
 scripts/       the pipeline
-docs/          WTL API reference
+docs/          WTL API reference, conventions, patch-day checklist, data reference
 questxp/       quest XP sweep: the in-game addon, cache parser and notes
 .claude/skills/wow-query/   the query-conventions skill for Claude Code
 CLAUDE.md      project context and locked decisions (agent-facing)
