@@ -196,7 +196,6 @@ sod_allowlist.json, sod_manual.json   hand-kept SoD tag inputs
 requirements.txt                one entry: mcp
 docs/                           reference docs (table above)
 scripts/                        the pipeline; config.py is the single source
-questxp/                        quest XP sweep: addon, parser, generator
 .claude/skills/wow-query/       query rules skill (force-added)
 out/<version>.<build>/          GITIGNORED: db2/, db2_hotfixed/, hotfixes.csv,
                                 files.csv, gametables/, wow.db, manifest.json

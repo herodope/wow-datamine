@@ -17,13 +17,8 @@ __pycache__/
 # base64 icon art that churns on every regeneration.
 reports/
 
-# Quest XP sweep. The addon, its parser and the generator ARE tracked -- they
-# are source, not output, and nothing regenerates them. Only the artifacts are
-# ignored: raw questcache.wdb captures copied out of the client between
-# sessions, and the CSVs the parser builds from them.
-questxp/cache/
-questxp/out/
-questxp/__pycache__/
+# Quest XP sweep. A separate local project, not part of the datamine.
+questxp/
 
 # Committed, never ignore — listed for intent, these are the deliverables:
 #   builds.json   manifest index, unrecoverable once Blizzard rotates a build
