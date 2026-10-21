@@ -149,8 +149,7 @@ Check with `--schema` before writing the WHERE clause.
 `GET /dbc/header/<Table>` returns `unverifieds`. Report those columns' **raw
 values only** — never a decoded name, a colour, or an interpretation.
 `LightData.Field_1_60_1_69876_055` moving `0 → 13533183` is reportable;
-"it became lavender" is not, and was recorded as a near-miss in CLAUDE.md
-finding #4.
+"it became lavender" is not (a recorded near-miss, finding #4).
 
 Use `enrich.Enricher.unverified(table)` rather than re-deriving this.
 

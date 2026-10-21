@@ -329,7 +329,7 @@ def step9_diff(version, previous, dry):
 
 def step9b_findings(version, dry):
     step("9b", "check_findings.py -- re-test the recorded predictions")
-    log("  CLAUDE.md 'Findings to verify' holds dated predictions from an earlier")
+    log("  The local findings record (config.FINDINGS_DOC) holds dated predictions from an earlier")
     log("  build. This re-checks each against the data just extracted.")
     log("")
     if dry:
@@ -338,7 +338,7 @@ def step9b_findings(version, dry):
     run([SCRIPTS / "check_findings.py", "--build", version] if version else [SCRIPTS / "check_findings.py"],
         dry, label="check_findings.py")
     log("")
-    log("  RESOLVED or FALSIFIED findings need CLAUDE.md updated by hand.")
+    log("  RESOLVED or FALSIFIED findings need the findings record updated by hand.")
     log("  Resolve existing predictions before recording new ones.")
 
 
@@ -434,7 +434,7 @@ def main(argv=None):
     log(f"PATCH DAY COMPLETE in {time.monotonic() - started:.0f}s" + ("  [DRY RUN]" if args.dry_run else ""))
     if not args.dry_run:
         log("")
-        log("  Next: check the five predictions in CLAUDE.md 'Findings to verify',")
+        log("  Next: check the five predictions in the findings record (config.FINDINGS_DOC),")
         log("  and whether the three retail-contamination cases cleared.")
     log(BANNER)
     return 0

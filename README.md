@@ -30,7 +30,7 @@ them with the patch-day sequence below; the writers create the directory
 themselves, so a fresh clone needs no setup.
 
 > `CLAUDE.md` is the project's working context, written for Claude Code — locked
-> decisions, measured findings, and traps discovered the hard way. It is long
+> decisions, conventions, and known traps. It is long
 > and reference-shaped. This file is the operational how-to; start here.
 
 ---
@@ -69,7 +69,7 @@ location. If your install is elsewhere, set an environment variable rather than
 editing the file:
 
 ```powershell
-$env:WOW_INSTALL_ROOT = 'D:\Games\World of Warcraft'
+$env:WOW_INSTALL_ROOT = '<WoW folder>'
 ```
 
 `INSTALL_ROOT` is the folder containing `.build.info`, **not** the
@@ -101,7 +101,7 @@ backslash makes the file invalid:
 ```json
 {
   "config": {
-    "wowFolder": "C:\\Program Files (x86)\\World of Warcraft",
+    "wowFolder": "<WoW folder, backslashes doubled>",
     "wowProduct": "wow_classic_beta",
     "region": "us",
     "locale": "enUS",
@@ -469,8 +469,8 @@ hotfix can change a value without changing the number of rows.
 `manifest.json` is shared. `extract_db2.py` owns the table records, and
 `inventory.py` merges an `inventory` section (file counts, encrypted counts
 by status, the FDID-set hash). A re-extract carries forward sections it does
-not own. It used to overwrite the whole file, which silently cost 69913 and
-69977 their encryption baselines.
+not own. The 69913 and 69977 manifests have no stored encryption baseline;
+`inventory.py` recomputes a missing baseline from `files.csv`.
 
 A value that moves only in `db2_hotfixed/` was hotfixed; one that moves in both
 shipped in the build. Collapsing the two into a single output loses that
@@ -627,7 +627,7 @@ Blizzard rotates a build off the version list, its config hashes are gone.
 | `diff_hotfixes.py` | Compare `db2/` against `db2_hotfixed/` within one build |
 | `render_patchnotes.py` | Render either diff as standalone HTML patch notes |
 | `player_notes.py` | The player edition of a build diff: class → spec → spell, live against live |
-| `check_findings.py` | Re-test the predictions recorded in `CLAUDE.md` against a build |
+| `check_findings.py` | Re-test the dated predictions in a local findings record (`config.FINDINGS_DOC`, not tracked) against a build |
 | `spell_gap.py` | Spell power Forever needs to match Classic Era damage, per spell; needs both builds extracted |
 | `test_*.py` | Stdlib unittest suites for `sod_tags`, `spell_reach` and `player_notes`; skipped when no `wow.db` exists |
 

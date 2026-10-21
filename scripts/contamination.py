@@ -52,9 +52,9 @@ Deliberately NOT a rule: "ID falls in a modern retail range". Achievement IDs
 here run 627-64159 with 160 of 233 rows above 61000, so an ID-range test would
 flag most of the table. ID ranges are reported as supporting evidence only.
 
-Deliberately NOT a rule: "the row is unreferenced". Proposed after the 461xxx
-Thunder Clap ladder turned out to be defined but unconsumed (CLAUDE.md finding
-#7). Measured on 1.60.1.69913 before writing it, and the base rate kills it.
+Deliberately NOT a rule: "the row is unreferenced". Measured on 1.60.1.69913
+with the 461xxx Thunder Clap ladder (defined but unconsumed) as the test case,
+and the base rate kills it.
 
 Resolving all 157 declared FK columns pointing at a spell and counting inbound
 references per spell, across four ways of deciding which columns count as

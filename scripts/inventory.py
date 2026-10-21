@@ -31,8 +31,8 @@ Two caveats, both verified against WTL's source rather than assumed:
             subtracting recordsFiltered from recordsTotal. Membership in
             NameMap is not the same as having a non-empty name: the two totals
             matched exactly at 1.60.1.69913 while 19,583 rows carried an empty
-            filename. That subtraction reported 0 against this script's own
-            CSV and is recorded in CLAUDE.md as a mistake that was committed.
+            filename. That subtraction reports 0 against this script's own
+            CSV.
 
 Merges its results into the existing manifest.json under "inventory" rather
 than overwriting what extract_db2.py wrote there.
@@ -324,7 +324,7 @@ def check_distinct_inventories(csv_path, build):
     genuinely share one file set -- only 2 of 610 shipped DB2 tables differ
     across all three -- so the check failed on correct data every time it ran.
     See the "a fix that works does not confirm the diagnosis" convention in
-    CLAUDE.md for how that assumption got committed.
+    CLAUDE.md.
 
     It still earns its place, because the failure mode it describes is real
     and has no other symptom: if the `showAllFiles` setting is turned on,
@@ -630,7 +630,7 @@ def main(argv=None):
         log("  NOTE: the encrypted-file count above is NOT a measurement this run.")
         log("  The file set did not move, so the count could not have moved either;")
         log("  a MATCH here restates that the build is unchanged and says nothing")
-        log("  about encryption. See finding #6 in CLAUDE.md.")
+        log("  about encryption. See Baseline metrics in CLAUDE.md.")
     log(f"  {section['durationSeconds']}s -> {csv_path}")
 
     check_distinct_inventories(csv_path, build)

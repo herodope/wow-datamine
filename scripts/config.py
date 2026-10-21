@@ -21,7 +21,7 @@ PRODUCT_CODE = "wow_classic_beta"
 # Override with the WOW_INSTALL_ROOT environment variable; the default is the
 # stock Battle.net location. WTL reads the same path from its own config.json
 # (see README), so if you set one, set both.
-DEFAULT_INSTALL_ROOT = r"C:\Program Files (x86)\World of Warcraft"
+DEFAULT_INSTALL_ROOT = r"C:\Program Files (x86)\World of Warcraft"  # betterleaks:allow (stock default)
 INSTALL_ROOT = Path(_os.environ.get("WOW_INSTALL_ROOT", DEFAULT_INSTALL_ROOT))
 FLAVOR_DIR = "_classic_beta_"
 GAME_DIR = INSTALL_ROOT / FLAVOR_DIR
@@ -162,6 +162,9 @@ SCRIPTS_DIR = REPO_ROOT / "scripts"
 OUT_DIR = REPO_ROOT / "out"               # gitignored — extracted data
 REPORTS_DIR = REPO_ROOT / "reports"       # gitignored — generated diff output
 VENDOR_DIR = REPO_ROOT / "vendor"         # cloned third-party tools
+# Local findings record parsed by check_findings.py. Not tracked: it is the
+# maintainer's build log, kept under the globally ignored .claude/ folder.
+FINDINGS_DOC = REPO_ROOT / ".claude" / "notes" / "state-log.md"
 
 
 def build_out_dir(version: str) -> Path:

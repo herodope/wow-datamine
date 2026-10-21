@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Check the "Findings to verify" predictions against a build's extracted data.
 
-CLAUDE.md records dated predictions from 1.60.1.69913. This re-checks each one
+The findings record (config.FINDINGS_DOC, a local file outside the repo's
+tracked content) holds dated predictions from 1.60.1.69913. This re-checks each one
 against whatever build is on disk and reports:
 
-    RESOLVED    the watched change happened; update CLAUDE.md and close it out
+    RESOLVED    the watched change happened; update the record and close it out
     UNRESOLVED  unchanged since the finding was recorded; still open
     FALSIFIED   the data contradicts what was recorded -- the finding is wrong,
                 or the world moved in a way nobody predicted
@@ -20,7 +21,7 @@ as the build before -- "live-only: 0" only meant "no live data". Overlay
 presence is read from manifest.json: no table with hotfix_delta and none
 hotfix_only means no overlay.
 
-The recorded values are parsed out of CLAUDE.md where they are machine-readable
+The recorded values are parsed out of the record where they are machine-readable
 (timestamps, record IDs, column names) so the doc stays authoritative and the
 two cannot drift silently. Where parsing fails the script says so rather than
 falling back to a stale constant.
@@ -63,7 +64,7 @@ def log(msg=""):
     print(msg, file=sys.stderr, flush=True)
 
 
-# --- CLAUDE.md parsing ------------------------------------------------------
+# --- findings record parsing ----------------------------------------------
 
 
 def findings_section(path):
@@ -176,7 +177,7 @@ class Build:
 def check_time_events(b, rec):
     ev = rec.get("time_events") or []
     if not ev:
-        return UNCHECKABLE, ["CLAUDE.md rows could not be parsed"]
+        return UNCHECKABLE, ["findings record rows could not be parsed"]
 
     h_plain, plain = b.table("TimeEventData")
     h_hot, hot = b.table("TimeEventData", hotfixed=True)
@@ -224,7 +225,7 @@ def check_time_events(b, rec):
         return RESOLVED, notes + [f"  row count grew {len(recorded_ts)} -> {len(actual_ts)}: cadence extended"]
     return FALSIFIED, notes + [
         f"  timestamps differ from the record ({recorded_ts} -> {actual_ts})",
-        "  the schedule shifted; update CLAUDE.md",
+        "  the schedule shifted; update the findings record",
     ]
 
 
@@ -271,7 +272,7 @@ def check_pvp(b, rec):
         f"  (whole table, all IDs, for context: {len(all_live):,} live)",
     ]
     if recorded is not None:
-        notes.append(f"  recorded in CLAUDE.md: {recorded:,} arrived by bulk injection")
+        notes.append(f"  recorded in the findings record: {recorded:,} arrived by bulk injection")
 
     if b.has_overlay is False:
         # "live-only: 0" here means "no live data", not "nothing is live-only".
@@ -297,7 +298,7 @@ def check_pvp(b, rec):
 def check_light_column(b, rec):
     name = rec.get("light_column")
     if not name:
-        return UNCHECKABLE, ["CLAUDE.md column name could not be parsed"]
+        return UNCHECKABLE, ["findings record column name could not be parsed"]
 
     header, _rows = b.table("LightData", hotfixed=True)
     if header is None:
@@ -333,7 +334,7 @@ def check_contamination(b, rec):
     if h_item is None:
         return UNCHECKABLE, ["  Item stubs: Item not extracted"]
     if not stub_ids:
-        return UNCHECKABLE, ["  Item stubs: the exact ID list could not be parsed from CLAUDE.md",
+        return UNCHECKABLE, ["  Item stubs: the exact ID list could not be parsed from the findings record",
                              "    refusing to substitute a population count for the finding"]
     present = [i for i in stub_ids if i in item]
     gone = [i for i in stub_ids if i not in item]
@@ -345,7 +346,7 @@ def check_contamination(b, rec):
         notes.append(f"    partially pruned; gone: {', '.join(gone[:12])}"
                      + ("…" if len(gone) > 12 else ""))
     if stub_count is not None and len(stub_ids) != stub_count:
-        notes.append(f"    WARNING: CLAUDE.md says {stub_count} stubs but lists "
+        notes.append(f"    WARNING: the findings record says {stub_count} stubs but lists "
                      f"{len(stub_ids)} IDs — the record is inconsistent")
 
     # Context only, never the check. Orphanhood is normal in this build.
@@ -396,10 +397,13 @@ def main(argv=None):
         log(f"{b.hotfixed} not found; run extract_db2.py for {version} first")
         return 2
 
-    claude_md = config.REPO_ROOT / "CLAUDE.md"
+    claude_md = config.FINDINGS_DOC
+    if not claude_md.is_file():
+        log(f"no findings record at {claude_md}; it is a local file and not part of the repo")
+        return 2
     section = findings_section(claude_md)
     if section is None:
-        log("could not find a '## Findings to verify' section in CLAUDE.md")
+        log(f"could not find a '## Findings to verify' section in {claude_md}")
         return 2
     rec = parse_recorded(section)
     rec["item_stub_ids"] = parse_stub_ids(claude_md)
@@ -434,7 +438,7 @@ def main(argv=None):
     log("=" * 72)
     log("  " + "  ".join(f"{k}: {v}" for k, v in sorted(tally.items())))
     if tally.get(FALSIFIED):
-        log("  FALSIFIED findings contradict CLAUDE.md — update the record.")
+        log("  FALSIFIED findings contradict the findings record — update it.")
     if tally.get(UNMEASURED):
         log("  UNMEASURED is not UNRESOLVED: the data to decide was never loaded.")
     if tally.get(RESOLVED):

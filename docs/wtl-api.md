@@ -301,8 +301,7 @@ are **members of** that map. `recordsTotal` is `CASC.AvailableFDIDs.Count` and
 build.
 
 > **Trap: matching totals do not mean every file is named.** At 1.60.1.69913
-> both are **1,441,771**, and an earlier revision of this file read that as
-> "nothing is unnamed". That is wrong, and the mistake was committed.
+> both are **1,441,771**, which reads as "nothing is unnamed" and is wrong.
 > Membership in `NameMap` is not the same as having a non-empty name —
 > **19,583** of those rows carry an empty filename. Count empty values in the
 > filename column (index 1); never infer naming coverage from the two totals
@@ -961,7 +960,7 @@ Returns `{ metaType, entries }` or bare `null`.
 > by stripping `[n]` before asking will get `null` and read it as "not an
 > enum". Table and column matching are case-insensitive.
 
-Relevant to the open `LightData` question in CLAUDE.md: 23 `LightData` columns
+Relevant to the open `LightData` question (finding #4 in the local findings record): 23 `LightData` columns
 are mapped `COLOR` in `mapping.dbdm`, all of them named.
 `Field_1_60_1_69876_055` is **not** among them, so the meta tree does not
 support reading it as packed RGB either. That finding stays unconfirmed.
@@ -1088,7 +1087,7 @@ question-mark icon) when `SpellMisc` has no row.
 > `single` (`DBCManager.cs:172`), and `FindRecords` itself calls the two-arg
 > `GetOrLoad`. There is no parameter to change this.
 >
-> That matters directly for finding #3 in CLAUDE.md. ✅ measured: of 4,218
+> That matters directly for finding #3 in the local findings record. ✅ measured: of 4,218
 > hotfix-only `ItemSparse` rows, `/dbc/tooltip/item/720` and `/item/286554`
 > both return **HTTP 200** with `name: "Unknown Item"`, `hasSparse: false`,
 > while `/item/25` gives `"Worn Shortsword"` and `/item/19019` gives
@@ -1245,10 +1244,9 @@ A second pass on 2026-09-20 exercised the following against a live instance on
 | `GET /casc/fdid` | 200 with bytes for the same encrypted FDIDs `blp2png` 404s on |
 | `GET /map/tile?…&output=png` | 200 `application/octet-stream`, 262144 bytes = 256×256×4 |
 
-**Corrected by that pass:** the `build=` guidance on `/dbc/meta/getMappings`
-was originally written backwards — "omit it" — from reading
-`WeatherType.dbde`'s six build-tagged lines without noticing the six untagged
-lines below them. The live response settled it.
+**Settled by that pass:** `/dbc/meta/getMappings` needs `build=`. Reading
+`WeatherType.dbde`'s six build-tagged lines without the six untagged lines
+below them suggests the opposite; the live response is what decides it.
 
 | `GET /dbc/labelColumns` | 12 entries, all `Table::LabelID` — not display-name columns |
 | `GET /dbc/header/Light` | `ContinentID → Map::ID`, `LightParamsID[0..7] → LightParams::ID`, no unverifieds |
@@ -1283,7 +1281,7 @@ A third pass cleared every non-mutating route that was still ⚠️:
 | `GET /dbc/data/{name}` | envelope carries `error`; values **are** HTML-encoded, as warned |
 | `GET /dbc/export/db2` | 200, `map.db2`, magic **`WDC5`** |
 | `GET /dbc/relations` | 531 keys, matching the baseline metric; `/dbc/relations/Map::ID` lists 70 referencing columns |
-| `GET /build/list` | 200, JSON array — **and it holds two Forever builds we had not recorded** (see below) |
+| `GET /build/list` | 200, JSON array — **and it holds two Forever builds that are off the live version list** (see below) |
 | `GET /casc/moreinfo` | 200, 5,129 bytes, HTML served as `text/plain` |
 | `GET /size/data` | **500** — `ArgumentOutOfRangeException` from `TACTSharp.EncodingInstance.FindContentKey` |
 | `GET /casc/hashbyid` | **`{}` for every input** — `ValueTuple` return with no `IncludeFields` |
