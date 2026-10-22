@@ -89,5 +89,22 @@
     "cdnConfig": "f065eade5276a5ac05606e60a4c5a1f7",
     "region": "us",
     "firstSeen": "2026-10-19T21:28:05+00:00"
+  },
+  "70532": {
+    "version": "1.60.1.70532",
+    "buildId": 70532,
+    "buildConfig": "ad1802f4455e427ed8b7769aab25b0c0",
+    "cdnConfig": "ccc89ec4bcc03f6cc1cc1c7861d9ed0f",
+    "region": "us",
+    "firstSeen": "2026-10-22T20:42:05+00:00"
+  },
+  "wowf:70532": {
+    "version": "1.60.1.70532",
+    "buildId": 70532,
+    "buildConfig": "2582289d81e380163c7a13472df4cb81",
+    "cdnConfig": "6bff2e685995b214c2ff5d08f3344542",
+    "region": "us",
+    "product": "wowf",
+    "firstSeen": "2026-10-21T19:00:06+00:00"
   }
 }
