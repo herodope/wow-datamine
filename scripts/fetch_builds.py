@@ -12,6 +12,7 @@ Usage:
     python scripts/fetch_builds.py --all-regions
     python scripts/fetch_builds.py --dry-run
     python scripts/fetch_builds.py --from-file dump.txt --region us
+    python scripts/fetch_builds.py --product wowf   # stored as "wowf:<buildId>"
 """
 
 import argparse
@@ -36,9 +37,9 @@ def log(msg):
 # --- Endpoint ---------------------------------------------------------------
 
 
-def fetch_versions(region):
+def fetch_versions(region, product):
     """Return the raw pipe-delimited body, or None on any network failure."""
-    url = config.versions_url(region)
+    url = config.versions_url(region, product)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
@@ -120,8 +121,16 @@ def load_builds(path):
 
 
 def save_builds(path, builds):
-    """Atomic write -- builds.json is not recoverable if we truncate it."""
-    ordered = {k: builds[k] for k in sorted(builds, key=lambda k: int(k))}
+    """Atomic write -- builds.json is not recoverable if we truncate it.
+
+    Bare keys (config.PRODUCT_CODE) first by build ID, then '<product>:<id>'
+    keys grouped by product.
+    """
+    def order(k):
+        product, _, bid = k.rpartition(":")
+        return (product, int(bid))
+
+    ordered = {k: builds[k] for k in sorted(builds, key=order)}
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".builds.", suffix=".json")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
@@ -143,6 +152,10 @@ def main(argv=None):
     ap.add_argument("--all-regions", action="store_true", help=f"query all of {', '.join(config.REGIONS)}")
     ap.add_argument("--dry-run", action="store_true", help="report what would be added, write nothing")
     ap.add_argument("--from-file", metavar="PATH", help="parse a saved endpoint response instead of fetching")
+    ap.add_argument("--product", default=config.PRODUCT_CODE,
+                    help=f"TACT product (default {config.PRODUCT_CODE}); other products are "
+                         "recorded with a 'product' field under '<product>:<buildId>' keys, "
+                         "which patchday.py ignores")
     args = ap.parse_args(argv)
 
     regions = list(config.REGIONS) if args.all_regions else [args.region]
@@ -160,7 +173,7 @@ def main(argv=None):
             with open(args.from_file, encoding="utf-8") as fh:
                 body = fh.read()
         else:
-            body = fetch_versions(region)
+            body = fetch_versions(region, args.product)
         if body is None:
             continue
         reached += 1
@@ -188,7 +201,9 @@ def main(argv=None):
                 skipped_foreign += 1
                 continue
 
-            key = str(build["buildId"])
+            key = config.builds_key(build["buildId"], args.product)
+            if args.product != config.PRODUCT_CODE:
+                build["product"] = args.product
             if key in preexisting:
                 already_known += 1
                 continue

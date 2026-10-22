@@ -452,11 +452,11 @@ def main(argv=None):
 
     build = args.build
     if not build:
-        candidates = sorted(p.name for p in config.OUT_DIR.iterdir() if p.is_dir()) if config.OUT_DIR.exists() else []
+        candidates = sorted(config.forever_out_dirs())
         if not candidates:
             log(f"no extracted builds under {config.OUT_DIR}; run extract_db2.py first")
             raise SystemExit(2)
-        build = candidates[-1]
+        build = candidates[-1][1]
 
     build_id = int(build.split(".")[-1])
     if not config.is_forever_build(build, build_id) and not args.allow_non_forever:

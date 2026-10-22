@@ -108,9 +108,15 @@ def load_builds():
 
 
 def forever_sorted(builds):
-    """Forever builds only, oldest first."""
+    """Forever builds of config.PRODUCT_CODE only, oldest first.
+
+    Entries from another product (fetch_builds.py --product) are skipped, so a
+    stress-test build never becomes the "previous build" of a beta build.
+    """
     out = []
     for key, entry in builds.items():
+        if config.builds_entry_product(entry) != config.PRODUCT_CODE:
+            continue
         version, bid = entry.get("version", ""), entry.get("buildId")
         if bid is None:
             continue
@@ -137,7 +143,8 @@ def step3_fetch(dry):
 
     run([SCRIPTS / "fetch_builds.py"], dry=False, label="fetch_builds.py")
     after = load_builds()
-    new_keys = set(after) - before
+    new_keys = {k for k in set(after) - before
+                if config.builds_entry_product(after[k]) == config.PRODUCT_CODE}
 
     if not new_keys:
         current = forever_sorted(after)

@@ -386,11 +386,11 @@ def main(argv=None):
 
     version = args.build
     if not version:
-        dirs = sorted(p.name for p in config.OUT_DIR.iterdir() if p.is_dir()) if config.OUT_DIR.exists() else []
+        dirs = sorted(config.forever_out_dirs())
         if not dirs:
             log(f"no extracted builds under {config.OUT_DIR}; run extract_db2.py first")
             return 2
-        version = dirs[-1]
+        version = dirs[-1][1]
 
     b = Build(version)
     if not b.hotfixed.is_dir():

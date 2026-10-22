@@ -141,14 +141,28 @@ DEFAULT_REGION = "us"
 REGIONS = ("us", "eu", "kr", "tw", "cn")
 
 
-def versions_url(region: str = DEFAULT_REGION) -> str:
+def versions_url(region: str = DEFAULT_REGION, product: str = PRODUCT_CODE) -> str:
     """Live version list. Pipe-delimited with a '## seqn' line, not JSON."""
-    return f"https://{region}.version.battle.net/v2/products/{PRODUCT_CODE}/versions"
+    return f"https://{region}.version.battle.net/v2/products/{product}/versions"
 
 
-def cdns_url(region: str = DEFAULT_REGION) -> str:
+def cdns_url(region: str = DEFAULT_REGION, product: str = PRODUCT_CODE) -> str:
     """CDN host list. Same pipe-delimited format as versions_url()."""
-    return f"https://{region}.version.battle.net/v2/products/{PRODUCT_CODE}/cdns"
+    return f"https://{region}.version.battle.net/v2/products/{product}/cdns"
+
+
+def builds_key(build_id, product: str = PRODUCT_CODE) -> str:
+    """builds.json key: the bare build ID for PRODUCT_CODE, '<product>:<id>' otherwise.
+
+    The same build ID can ship on two products (the beta and the wowf stress
+    test share the 1.60 line), and each product's hashes must be captured.
+    """
+    return str(build_id) if product == PRODUCT_CODE else f"{product}:{build_id}"
+
+
+def builds_entry_product(entry: dict) -> str:
+    """The product a builds.json entry belongs to. No field means PRODUCT_CODE."""
+    return entry.get("product") or PRODUCT_CODE
 
 
 # --- Repo paths -------------------------------------------------------------
@@ -170,6 +184,22 @@ FINDINGS_DOC = REPO_ROOT / ".claude" / "notes" / "state-log.md"
 def build_out_dir(version: str) -> Path:
     """out/<version>.<build>/ for one build, e.g. out/1.60.1.69913/."""
     return OUT_DIR / version
+
+
+def forever_out_dirs() -> list:
+    """[(buildId, dirname)] for out/ dirs named as a Forever build version.
+
+    A product-labelled dir such as out/wowf-1.60.1.70532/ fails the version
+    pattern and is never returned, so it cannot become a default build.
+    """
+    found = []
+    if OUT_DIR.is_dir():
+        for d in OUT_DIR.iterdir():
+            parts = d.name.rsplit(".", 1)
+            if (d.is_dir() and len(parts) == 2 and parts[1].isdigit()
+                    and is_forever_build(d.name, int(parts[1]), warn=False)):
+                found.append((int(parts[1]), d.name))
+    return found
 
 
 def report_path(from_version: str, to_version: str) -> Path:

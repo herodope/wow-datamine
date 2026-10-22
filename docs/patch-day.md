@@ -89,6 +89,54 @@ python scripts/render_patchnotes.py --build $B --since <YYYYMMDD>
   fails with `WinError 5`, and the rebuilt database is left as `wow.db.tmp`.
   Stop the MCP server, then re-run.
 
+## Two products on one build ID
+
+A build ID can ship on more than one product. 1.60.1.70532 shipped first on
+the Forever stress test (`wowf`, flavor folder `_forever_`) and then on the
+beta, with the same version string and a different `buildConfig`.
+
+- **`builds.json`**: run `fetch_builds.py --product <code>` for a product
+  other than `config.PRODUCT_CODE`. Its entry is keyed `<product>:<buildId>`
+  and carries a `product` field, so it cannot shadow or block the default
+  product's entry for the same ID. `patchday.py` ignores those entries when
+  picking the previous build.
+- **`out/`**: extract the other product under the bare version, because every
+  WTL route takes the bare version. Once its diffs are written, rename the
+  folder to `out/<product>-<version>/`. That name fails the Forever version
+  pattern, so no default or previous-build lookup picks it up.
+  `query.py --build <product>-<version>` still opens it.
+- **WTL's own caches** are keyed by bare version: `dbcs/<version>/` and
+  `manifests/<version>.wtlm`. Rename them to the same `<product>-<version>`
+  label. Otherwise a second product on that version is served the first
+  product's DB2s and manifest. WTL writes a manifest for the loaded build when
+  none exists for its version.
+- To re-run a WTL-backed step for a labelled build, rename all three back to
+  the bare version first.
+
+### Hotfix caches with the same header build are merged
+
+WTL loads every file named exactly `DBCache.bin` under the install, plus
+`caches/*.bin` in its own folder. It merges all caches whose header carries
+the same build ID into one overlay. This is source-read, not measured:
+`HotfixManager.LoadCaches` and `ParseCache` key readers on the header build,
+and `CombineCache` folds each further file into the existing reader.
+
+When two products' clients are on the same build ID, a hotfixed extraction of
+either one therefore returns both products' hotfixes combined, with no error.
+
+- **Before starting WTL for one product, move the other product's
+  `DBCache.bin` out of the install.** Check that the header build of every
+  `DBCache.bin` left under the install is the one you mean to extract. The
+  header build is the little-endian uint32 at byte offset 8, after `XFTH`
+  and the format version.
+- **Restore the moved file afterwards** and compare hashes. The client reads
+  it on its next login.
+- **`hotfixes.csv` cannot tell the two products apart.** WTL files each push
+  once, under the first cache that showed it, and both products report the
+  same version string. Attribute a push by its `firstDetected` time, which
+  says which cache delivered it first. A push filed under one product can
+  still be live on the other.
+
 ## After the diff
 
 `python scripts/check_findings.py --build <version>` re-tests the dated

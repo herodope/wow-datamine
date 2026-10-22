@@ -589,7 +589,8 @@ reimplementing the check.
 ## What is committed
 
 ```
-builds.json    manifest index, keyed by buildId — the unrecoverable bit
+builds.json    manifest index, keyed by buildId (<product>:<buildId> for a
+               second product) — the unrecoverable bit
 scripts/       the pipeline
 docs/          WTL API reference, conventions, patch-day checklist, data reference
 .claude/skills/wow-query/   the query-conventions skill for Claude Code
