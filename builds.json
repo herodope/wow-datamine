@@ -106,5 +106,50 @@
     "region": "us",
     "product": "wowf",
     "firstSeen": "2026-10-21T19:00:06+00:00"
+  },
+  "wowf:70630": {
+    "version": "1.60.1.70630",
+    "buildId": 70630,
+    "buildConfig": "644ffedb0d59bb0da2af9011b36f44db",
+    "cdnConfig": "0a08751bdd80706c48e4d099557fa853",
+    "region": "us",
+    "product": "wowf",
+    "firstSeen": "2026-10-31T23:40:03+00:00"
+  },
+  "wowf:70634": {
+    "version": "1.60.1.70634",
+    "buildId": 70634,
+    "buildConfig": "7d8ae4cd9c1f639a3ea04fd47e21c746",
+    "cdnConfig": "212ef6f99fdd1fdc06fbb182e49c3233",
+    "region": "us",
+    "product": "wowf",
+    "firstSeen": "2026-10-31T23:40:03+00:00"
+  },
+  "wowf:70658": {
+    "version": "1.60.1.70658",
+    "buildId": 70658,
+    "buildConfig": "165410aca770316ea0f88100bb4830c2",
+    "cdnConfig": "f0fcf03baf658e38f2f6c96a77798a2c",
+    "region": "us",
+    "product": "wowf",
+    "firstSeen": "2026-10-31T23:40:03+00:00"
+  },
+  "wowf:70685": {
+    "version": "1.60.1.70685",
+    "buildId": 70685,
+    "buildConfig": "002a8047a7c3a53de5e981936db76cce",
+    "cdnConfig": "9529b048134c5f9375bbe754b8edc5ef",
+    "region": "us",
+    "product": "wowf",
+    "firstSeen": "2026-10-31T23:40:03+00:00"
+  },
+  "wowf:70707": {
+    "version": "1.60.1.70707",
+    "buildId": 70707,
+    "buildConfig": "7feb61f3c994bcb168526b8db521514a",
+    "cdnConfig": "c74a0a5afa69d7b60e07f7dae9fc7969",
+    "region": "us",
+    "product": "wowf",
+    "firstSeen": "2026-10-31T23:38:31+00:00"
   }
 }
