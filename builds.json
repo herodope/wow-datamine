@@ -151,5 +151,14 @@
     "region": "us",
     "product": "wowf",
     "firstSeen": "2026-10-31T23:38:31+00:00"
+  },
+  "wowf:70755": {
+    "version": "1.60.1.70755",
+    "buildId": 70755,
+    "buildConfig": "9d9888f2d89a2dcc9eacc68a2d7cb3dc",
+    "cdnConfig": "a9ae49e88bd7579068e940e480a726a5",
+    "region": "us",
+    "product": "wowf",
+    "firstSeen": "2026-11-03T18:59:55+00:00"
   }
 }
