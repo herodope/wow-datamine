@@ -503,7 +503,7 @@ def _book_set(data, tags, cov, stats):
         for s in classed:
             candidates += 1
             tags.add(s, BOOK, "book_set",
-                     f"learn item {item} (Item {cls[0]}/{cls[1] if cls else '?'}"
+                     f"learn item {item} (Item {f'{cls[0]}/{cls[1]}' if cls else '?'}"
                      f"{'' if cls else ', no Item row'}; no live ItemSparse row) "
                      f"-[ItemXItemEffect -> ItemEffect TriggerType=6 SpellID]-> "
                      f"{data.label(s)} SpellClassSet {data.class_set[s]}",
