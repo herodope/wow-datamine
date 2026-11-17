@@ -54,6 +54,9 @@ the weaker tier.
    - 312 teach nothing with a class set.
    - 9 are `Item` ClassID 9 (Recipe): vanilla class books teaching ranked base
      spells (Shadow Bolt 1088, Purify 1152). Every SoD book is 0/8.
+   - The class comes from the live `Item` row, or from `plain_Item` when a
+     hotfix has invalidated the live row. Measured at 70938: Recipe book 9196
+     has no live `Item` row, and without the fallback Fear 5782 is tagged.
 3. **Propagation.** Via `EffectTriggerSpell` only (declared), one hop at a
    time; the child inherits the parent's tier.
    - A child referenced by an untagged spell through a declared cross-spell

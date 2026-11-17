@@ -127,6 +127,7 @@ class SodTags(unittest.TestCase):
             1311606, 20473,
             26573, 20116, 20922, 20923, 20924,   # Consecration ranks
             25771, 18350,                        # Forbearance, Dummy Trigger (guard)
+            5782,                                # Fear: Recipe book, live Item row invalidated
             10, 100,                             # Blizzard, Charge (aura-4 collisions)
         }
         for s in sorted(base):

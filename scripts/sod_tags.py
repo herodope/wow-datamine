@@ -475,6 +475,16 @@ def _book_set(data, tags, cov, stats):
     sparse = {r[0] for r in q("SELECT ID FROM ItemSparse")}
     item_class = {i: (_int(c), _int(s)) for i, c, s in
                   q("SELECT ID, ClassID, SubclassID FROM Item")}
+    # A hotfix that invalidates an Item row removes it from the live table but
+    # does not change what the item is, so the Recipe exclusion reads the
+    # shipped row when the live one is gone. Measured case at 70938: Item 9196,
+    # the Recipe book for Fear 5782, has no live Item row.
+    shipped_class = {}
+    if _columns(data.conn, "plain_Item") >= {"ID", "ClassID", "SubclassID"}:
+        shipped_class = {i: (_int(c), _int(s)) for i, c, s in
+                         q("SELECT ID, ClassID, SubclassID FROM plain_Item")
+                         if i not in item_class}
+    item_class.update(shipped_class)
     learn = {}                     # item -> {spell}
     for item, spell in q(
             "SELECT DISTINCT x.ItemID, e.SpellID FROM ItemEffect e "
@@ -496,15 +506,16 @@ def _book_set(data, tags, cov, stats):
         if not classed:
             excluded.append((item, "no taught spell carries SpellClassSet > 0", taught))
             continue
+        src = " from plain_Item, no live Item row" if item in shipped_class else ""
         if cls and cls[0] == ITEM_CLASS_RECIPE:
-            excluded.append((item, f"Item ClassID {cls[0]}/{cls[1]} (Recipe): vanilla-style "
+            excluded.append((item, f"Item ClassID {cls[0]}/{cls[1]}{src} (Recipe): vanilla-style "
                                    f"class book, not a SoD learn item", taught))
             continue
         for s in classed:
             candidates += 1
             tags.add(s, BOOK, "book_set",
                      f"learn item {item} (Item {f'{cls[0]}/{cls[1]}' if cls else '?'}"
-                     f"{'' if cls else ', no Item row'}; no live ItemSparse row) "
+                     f"{src if cls else ', no Item row'}; no live ItemSparse row) "
                      f"-[ItemXItemEffect -> ItemEffect TriggerType=6 SpellID]-> "
                      f"{data.label(s)} SpellClassSet {data.class_set[s]}",
                      target_missing=s not in data.name,
