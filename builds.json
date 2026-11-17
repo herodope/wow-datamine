@@ -160,5 +160,14 @@
     "region": "us",
     "product": "wowf",
     "firstSeen": "2026-11-03T18:59:55+00:00"
+  },
+  "wowf:70938": {
+    "version": "1.60.1.70938",
+    "buildId": 70938,
+    "buildConfig": "3627b099867bfde3e37a17cf44f69cdc",
+    "cdnConfig": "3363ac656da5f261cdc675ab28b2744c",
+    "region": "us",
+    "product": "wowf",
+    "firstSeen": "2026-11-17T14:52:05+00:00"
   }
 }
