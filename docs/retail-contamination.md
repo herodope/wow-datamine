@@ -4,8 +4,8 @@ How `scripts/contamination.py` flags retail-era rows in Forever tables, which
 rules exist and which were measured and rejected. Read this before changing a
 rule or judging a finding.
 
-`wow_classic_beta` is a recycled product code and Forever shares tooling with
-retail, so retail-era rows leak into tables that should hold only Classic
+Forever shares tooling with retail, and its beta ran on the recycled product
+code `wow_classic_beta`, so retail-era rows leak into tables that should hold only Classic
 content. They get pruned over time. **Track them per build: a new one appearing
 is a signal, and one disappearing tells you Blizzard noticed.**
 

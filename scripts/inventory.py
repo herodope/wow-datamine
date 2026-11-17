@@ -418,7 +418,7 @@ def main(argv=None):
 
     build_id = int(build.split(".")[-1])
     if not config.is_forever_build(build, build_id) and not args.allow_non_forever:
-        log(f"\n{build} is not a Forever build -- `wow_classic_beta` is a recycled product code.")
+        log(f"\n{build} is not a Forever build -- `{config.BETA_PRODUCT_CODE}` is a recycled product code.")
         log("Pass --allow-non-forever if you really mean it.\n")
         raise SystemExit(2)
 

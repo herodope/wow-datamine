@@ -91,20 +91,25 @@ python scripts/render_patchnotes.py --build $B --since <YYYYMMDD>
 
 ## Two products on one build ID
 
-A build ID can ship on more than one product. 1.60.1.70532 shipped first on
-the Forever stress test (`wowf`, flavor folder `_forever_`) and then on the
-beta, with the same version string and a different `buildConfig`.
+A build ID can ship on more than one product. 1.60.1.70245 and 1.60.1.70532
+each shipped on both `wowf` (flavor folder `_forever_`) and the beta
+(`wow_classic_beta`, flavor folder `_classic_beta_`), with the same version
+string and a different `buildConfig`.
 
-- **`builds.json`**: run `fetch_builds.py --product <code>` for a product
-  other than `config.PRODUCT_CODE`. Its entry is keyed `<product>:<buildId>`
-  and carries a `product` field, so it cannot shadow or block the default
-  product's entry for the same ID. `patchday.py` ignores those entries when
-  picking the previous build.
+`config.PRODUCT_CODE` is `wowf`, the live game. The beta is the other product.
+
+- **`builds.json`**: run `fetch_builds.py --product wow_classic_beta` for a
+  beta build. Its entry is keyed `wow_classic_beta:<buildId>` and carries a
+  `product` field, so it cannot shadow or block the `wowf` entry for the same
+  ID. `patchday.py` ignores those entries when picking the previous build.
 - **`out/`**: extract the other product under the bare version, because every
   WTL route takes the bare version. Once its diffs are written, rename the
   folder to `out/<product>-<version>/`. That name fails the Forever version
   pattern, so no default or previous-build lookup picks it up.
-  `query.py --build <product>-<version>` still opens it.
+  `query.py --build <product>-<version>` still opens it. Beta builds 69876
+  through 70532 are stored as `out/wow_classic_beta-<version>/`.
+- **WTL's `config.json`** names one product (`wowProduct`). Extracting a beta
+  build means switching it to `wow_classic_beta`, and back to `wowf` after.
 - **WTL's own caches** are keyed by bare version: `dbcs/<version>/` and
   `manifests/<version>.wtlm`. Rename them to the same `<product>-<version>`
   label. Otherwise a second product on that version is served the first

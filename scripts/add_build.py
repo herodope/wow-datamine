@@ -26,7 +26,7 @@ Usage:
 
     # a second product, just the spell tables
     python scripts/add_build.py 1.15.9.69722 \\
-        --switch-product wow_classic_era --restore-product wow_classic_beta \\
+        --switch-product wow_classic_era --restore-product wowf \\
         --tables SpellEffect,SpellName,SpellMisc
 
     python scripts/add_build.py --print-loaded    # what is WTL serving?

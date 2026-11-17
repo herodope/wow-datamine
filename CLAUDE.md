@@ -1,7 +1,7 @@
 # WoW Forever Datamining
 
 Local pipeline for extracting, parsing, and diffing World of Warcraft: Forever
-client data across beta builds.
+client data across live and beta builds.
 
 Local only: `.claude/notes/state-log.md` (build log, findings record) and
 `.claude/archive/` (the full pre-split CLAUDE.md).
@@ -14,11 +14,20 @@ Local only: `.claude/notes/state-log.md` (build log, findings record) and
 |---|---|
 | Game | World of Warcraft: Forever (Classic+) |
 | Install root | `config.INSTALL_ROOT` — stock Battle.net path by default; override with the `WOW_INSTALL_ROOT` env var |
-| Flavor folder | `_classic_beta_` |
-| TACT product code | `wow_classic_beta` |
+| Flavor folder | `_forever_` |
+| TACT product code | `wowf` (live; `config.PRODUCT_CODE`) |
+| Beta product code | `wow_classic_beta`, flavor `_classic_beta_` (`config.BETA_PRODUCT_CODE`) |
 | CDN path | `tpr/wow` |
 | Beta announced | 2026-09-17 — the **public** start |
-| First build on CDN | 2026-09-16 18:23 UTC (build 69876) |
+| First build on CDN | 2026-09-16 18:23 UTC (build 69876, beta) |
+| First `wowf` build | 1.60.1.70245 (2026-10-13, stress test) |
+
+**Bare names belong to `wowf`.** `builds.json` keys, `out/<version>/` and WTL's
+`dbcs/<version>/` and `manifests/<version>.wtlm` use the bare build for `wowf`.
+Beta builds are `wow_classic_beta:<id>` in `builds.json` and
+`wow_classic_beta-<version>` on disk, so no default or previous-build lookup
+picks them up. See "Two products on one build ID" in
+[`docs/patch-day.md`](docs/patch-day.md).
 
 Storage is **CASC** (not MPQ). Builds predate the announcement by about a day:
 69876 and 69893 were both pushed on 09-16. Do not use 2026-09-17 as a lower
@@ -39,7 +48,9 @@ version list. Capture them every patch day, before anything else. 69876 and
 
 ## CRITICAL: build filtering
 
-`wow_classic_beta` is a **recycled product code**. It has previously hosted:
+`wowf` has carried only 1.60 builds (✅ measured 2026-11-17 against
+wago.tools, 14 builds). The beta's `wow_classic_beta` is a **recycled product
+code**. It has previously hosted:
 
 | Version line | Product |
 |---|---|
@@ -71,7 +82,7 @@ and the beta's public start date is a day later than its first build.
 
 `FOREVER_MIN_BUILD_ID` (**69876**, the oldest build observed) is *not* how
 Forever is identified. It exists to catch one hypothetical: a future 1.6x
-build on this recycled product code that is **not** Forever. That has never
+build on a recycled product code that is **not** Forever. That has never
 happened.
 
 A build matching the version pattern but falling below the gate is a
@@ -148,7 +159,8 @@ dotnet run -c Release
 - It is a **blocking server**. Scripts that depend on it must detect it is not
   running and fail with a clear message rather than hanging.
 - ⚠️ The **Manual build** box on the Diff page defaults to product `wow`. It
-  must be `wow_classic_beta`. Invalid config hashes crash WTL outright.
+  must be `wowf` (`wow_classic_beta` for a beta build). Invalid config hashes
+  crash WTL outright.
 
 ---
 
@@ -277,13 +289,14 @@ apply to the libraries.
 ## Endpoints
 
 ```
-https://us.version.battle.net/v2/products/wow_classic_beta/versions
-https://us.version.battle.net/v2/products/wow_classic_beta/cdns
+https://us.version.battle.net/v2/products/wowf/versions
+https://us.version.battle.net/v2/products/wowf/cdns
 ```
 
 Pipe-delimited, not JSON. The `## seqn` line is a comment, not data. Regions:
-`us`, `eu`, `kr`, `tw`, `cn`. Use `us`; builds are usually identical across
-regions but `cn` can lag or diverge.
+`us`, `eu`, `kr`, `tw`, `cn`. Use `us`. Regions can serve different builds
+during a rollout: on 2026-11-17 `us` served 70959 while `eu`, `kr`, `tw` and
+`cn` still served 70938. `fetch_builds.py --all-regions` captures every one.
 
 ---
 

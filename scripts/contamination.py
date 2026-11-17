@@ -1,8 +1,8 @@
 """Detect retail data that leaked into a Classic+ build.
 
-`wow_classic_beta` is a recycled product code and Forever is built on shared
-tooling, so retail-era rows turn up in tables that should only contain Classic
-content. They are worth tracking per build: they get pruned over time, and a
+Forever's beta ran on the recycled product code `wow_classic_beta`, and
+Forever is built on shared tooling, so retail-era rows turn up in tables that
+should only contain Classic content. They are worth tracking per build: they get pruned over time, and a
 new one appearing is a signal in itself.
 
 Rules are ranked by how much they actually discriminate, measured against
@@ -540,8 +540,8 @@ def render_markdown(findings, coverage=None):
         return L
 
     L.append(
-        "Rows that look like retail-era data in a Classic+ build. `wow_classic_beta` "
-        "is a recycled product code and Forever shares tooling with retail, so these "
+        "Rows that look like retail-era data in a Classic+ build. Forever shares "
+        "tooling with retail, so these "
         "turn up and get pruned over time — a **new** one appearing is itself a signal."
     )
     L.append("")

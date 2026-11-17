@@ -12,7 +12,7 @@ Usage:
     python scripts/fetch_builds.py --all-regions
     python scripts/fetch_builds.py --dry-run
     python scripts/fetch_builds.py --from-file dump.txt --region us
-    python scripts/fetch_builds.py --product wowf   # stored as "wowf:<buildId>"
+    python scripts/fetch_builds.py --product wow_classic_beta   # stored as "wow_classic_beta:<buildId>"
 """
 
 import argparse

@@ -111,7 +111,7 @@ def forever_sorted(builds):
     """Forever builds of config.PRODUCT_CODE only, oldest first.
 
     Entries from another product (fetch_builds.py --product) are skipped, so a
-    stress-test build never becomes the "previous build" of a beta build.
+    beta build never becomes the "previous build" of a live build.
     """
     out = []
     for key, entry in builds.items():

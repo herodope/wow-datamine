@@ -135,7 +135,7 @@ def main(argv=None):
 
     build_id = int(build.split(".")[-1])
     if not config.is_forever_build(build, build_id) and not args.allow_non_forever:
-        log(f"\n{build} is not a Forever build -- `{config.PRODUCT_CODE}` is recycled.")
+        log(f"\n{build} is not a Forever build -- `{config.BETA_PRODUCT_CODE}` is recycled.")
         log("  Pass --allow-non-forever if you mean it.")
         return 2
 

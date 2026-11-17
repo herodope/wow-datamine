@@ -1,8 +1,7 @@
 """Single source of truth for every literal shared across the pipeline.
 
 Nothing else in scripts/ should contain a product code, an install path, a
-CDN host or a build-filter rule. If Blizzard moves Forever to a dedicated
-product code, that is a one-line change here.
+CDN host or a build-filter rule.
 """
 
 import os as _os
@@ -12,10 +11,15 @@ from pathlib import Path
 
 # --- Target -----------------------------------------------------------------
 
-# TACT product code. Recycled by Blizzard across many Classic betas — see
-# FOREVER_* below for the filter that separates Forever from everything else
-# that has lived on this product.
-PRODUCT_CODE = "wow_classic_beta"
+# TACT product code of the live game. builds.json keys, out/ folders and WTL's
+# caches use bare names for this product and '<product>:<id>' /
+# '<product>-<version>' for any other.
+PRODUCT_CODE = "wowf"
+
+# The Forever beta's product code, kept for its history in builds.json and
+# out/. Recycled by Blizzard across many Classic betas: see FOREVER_* below for
+# the filter that separates Forever from everything else that lived on it.
+BETA_PRODUCT_CODE = "wow_classic_beta"
 
 # WoW install root -- the folder holding .build.info, NOT the flavor folder.
 # Override with the WOW_INSTALL_ROOT environment variable; the default is the
@@ -23,7 +27,7 @@ PRODUCT_CODE = "wow_classic_beta"
 # (see README), so if you set one, set both.
 DEFAULT_INSTALL_ROOT = r"C:\Program Files (x86)\World of Warcraft"  # betterleaks:allow (stock default)
 INSTALL_ROOT = Path(_os.environ.get("WOW_INSTALL_ROOT", DEFAULT_INSTALL_ROOT))
-FLAVOR_DIR = "_classic_beta_"
+FLAVOR_DIR = "_forever_"
 GAME_DIR = INSTALL_ROOT / FLAVOR_DIR
 
 CDN_PATH = "tpr/wow"
@@ -34,9 +38,11 @@ CDN_PATH = "tpr/wow"
 # with a LOUD failure mode, not a second filter.
 #
 # Measured 2026-09-20 against WTL's /build/list: the version lines that have
-# ever lived on this recycled product code are 1.13, 1.60, 2.5, 3.4, 4.4 and
-# 5.5. Only 1.60 is Forever, and nothing else comes near it, so
-# FOREVER_VERSION_PATTERN discriminates completely on its own.
+# ever lived on the recycled beta product code are 1.13, 1.60, 2.5, 3.4, 4.4
+# and 5.5. Only 1.60 is Forever, and nothing else comes near it, so
+# FOREVER_VERSION_PATTERN discriminates completely on its own. Measured
+# 2026-11-17 against wago.tools: wowf has carried only 1.60 (14 builds, oldest
+# 70245).
 #
 # Do not filter on date: wago.tools backfills and re-indexes older builds, so
 # dates are not a reliable discriminator.
@@ -110,7 +116,7 @@ def warn_near_miss(version: str, build_id, detail: str) -> None:
         "  a sanity check. A build reaching here is either a real Forever build older",
         f"  than any yet seen -- in which case LOWER FOREVER_MIN_BUILD_ID to {build_id}",
         "  in scripts/config.py and capture its buildConfig/cdnConfig before Blizzard",
-        "  rotates them off the version list -- or a genuine 1.6x collision on this",
+        "  rotates them off the version list -- or a genuine 1.6x collision on a",
         "  recycled product code, which would be the first ever and is worth a look.",
         "",
         "  Do not ignore this. A silent version of this message hid builds 69876 and",
@@ -154,8 +160,8 @@ def cdns_url(region: str = DEFAULT_REGION, product: str = PRODUCT_CODE) -> str:
 def builds_key(build_id, product: str = PRODUCT_CODE) -> str:
     """builds.json key: the bare build ID for PRODUCT_CODE, '<product>:<id>' otherwise.
 
-    The same build ID can ship on two products (the beta and the wowf stress
-    test share the 1.60 line), and each product's hashes must be captured.
+    The same build ID can ship on two products (wowf and the beta share the
+    1.60 line, e.g. 70245 and 70532), and each product's hashes must be captured.
     """
     return str(build_id) if product == PRODUCT_CODE else f"{product}:{build_id}"
 
@@ -189,8 +195,8 @@ def build_out_dir(version: str) -> Path:
 def forever_out_dirs() -> list:
     """[(buildId, dirname)] for out/ dirs named as a Forever build version.
 
-    A product-labelled dir such as out/wowf-1.60.1.70532/ fails the version
-    pattern and is never returned, so it cannot become a default build.
+    A product-labelled dir such as out/wow_classic_beta-1.60.1.70532/ fails the
+    version pattern and is never returned, so it cannot become a default build.
     """
     found = []
     if OUT_DIR.is_dir():

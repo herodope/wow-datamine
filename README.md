@@ -43,7 +43,7 @@ themselves, so a fresh clone needs no setup.
 | .NET SDK | **10.x** — `wow.tools.local` targets `net10.0`. Runtimes alone are not enough; check with `dotnet --list-sdks` |
 | Python | 3.10+ |
 | git | for the vendored repos and their submodules |
-| WoW | a Battle.net install with the `_classic_beta_` flavor (product `wow_classic_beta`) |
+| WoW | a Battle.net install with the `_forever_` flavor (product `wowf`) |
 | RAM | 3–5 GB free while WTL is running; more for DB2 global search |
 | Disk | the listfile alone is ~150 MB, and `out/` grows quickly |
 
@@ -73,7 +73,7 @@ $env:WOW_INSTALL_ROOT = '<WoW folder>'
 ```
 
 `INSTALL_ROOT` is the folder containing `.build.info`, **not** the
-`_classic_beta_` flavor folder. WTL needs the same path in its own
+`_forever_` flavor folder. WTL needs the same path in its own
 `config.json` (below) — if you set one, set both.
 
 ---
@@ -102,7 +102,7 @@ backslash makes the file invalid:
 {
   "config": {
     "wowFolder": "<WoW folder, backslashes doubled>",
-    "wowProduct": "wow_classic_beta",
+    "wowProduct": "wowf",
     "region": "us",
     "locale": "enUS",
     "definitionDir": "C:\\path\\to\\wow-datamine\\vendor\\WoWDBDefs\\definitions"
@@ -114,7 +114,7 @@ Substitute your own install root and repo location. Four things worth getting
 right:
 
 - **`wowFolder` is the install root, not the flavor folder.** WTL validates it
-  by looking for `.build.info`, which sits at the root; `_classic_beta_` is
+  by looking for `.build.info`, which sits at the root; `_forever_` is
   selected by `wowProduct`.
 - **`definitionDir` points at the `definitions` subdirectory**, not the
   WoWDBDefs repo root. WTL validates it by looking for `Map.dbd` inside, and
@@ -254,7 +254,8 @@ build, and `patchday.py` stops rather than extract it under the new name.
 </details>
 
 ⚠️ On WTL's diff page, the **Manual build** box defaults to product `wow`. It
-must be `wow_classic_beta`. Invalid config hashes crash WTL outright.
+must be `wowf` (`wow_classic_beta` for a beta build). Invalid config hashes
+crash WTL outright.
 
 ---
 
@@ -318,7 +319,7 @@ only happens when you ask for it:
 
 ```powershell
 python scripts/add_build.py 1.15.9.69722 `
-    --switch-product wow_classic_era --restore-product wow_classic_beta `
+    --switch-product wow_classic_era --restore-product wowf `
     --tables SpellEffect,SpellName,SpellMisc,SpellCastTimes,SpellDuration
 ```
 
@@ -561,7 +562,8 @@ are regenerated locally and not committed.
 
 ## Build filtering
 
-`wow_classic_beta` is a **recycled product code** — it has also hosted the
+The live game is on `wowf`, which has carried only 1.60 builds. The beta ran
+on `wow_classic_beta`, a **recycled product code** that has also hosted the
 Classic 2019, Era/SoD, BC, Wrath, Cataclysm and MoP Classic betas. A build is
 Forever if and only if:
 
@@ -570,8 +572,8 @@ version matches ^1\.6\d\.   AND   buildId >= 69876
 ```
 
 **The version regex is the discriminator.** Measured against WTL's build list,
-the version lines that have ever lived on this product code are 1.13, 1.60,
-2.5, 3.4, 4.4 and 5.5 — only 1.60 is Forever, and nothing else comes close.
+the version lines that have ever lived on the beta product code are 1.13,
+1.60, 2.5, 3.4, 4.4 and 5.5 — only 1.60 is Forever, and nothing else comes close.
 
 The build-ID floor is a *sanity check* for a future 1.6x collision, not a
 second filter, and it fails loudly rather than quietly. It was set to a round

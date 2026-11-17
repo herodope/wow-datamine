@@ -629,7 +629,7 @@ recordID DESC`. `length` is applied as a SQL `LIMIT`, so paging is server-side.
 ### Download latest hotfixes — `GET /dbc/hotfixes/downloadLatest` ⚠️ source-read — **do not run on this install**
 
 > **It imports another game's hotfixes into the local database, permanently.**
-> `branch` accepts only `retail`, `ptr` or `beta` — there is no
+> `branch` accepts only `retail`, `ptr` or `beta` — there is no `wowf` or
 > `wow_classic_beta` option. It fetches
 > `storage.googleapis.com/raidbots-static/wow/<branch>/enUS/DBCache.bin`,
 > writes it to `caches/`, and calls `HotfixManager.ParseCache`, which
