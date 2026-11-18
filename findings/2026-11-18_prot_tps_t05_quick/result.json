@@ -1,0 +1,294 @@
+{
+ "sets": {
+  "tps_t05": {
+   "kind": "optimize",
+   "spec": "prot_paladin",
+   "objective": "tps",
+   "metric": "Tps",
+   "t05": true,
+   "rules": "prot_v3",
+   "rules_sha256": "8c3240ef86a14ab145ba199058901c7343caf173c8a5abe43f636bc343b59671",
+   "budget": "quick",
+   "race": "RaceUndead",
+   "encounter": "boss",
+   "sim_sha": "b83fe9df5fcd04d08061514332105ad9b769971d",
+   "db_json_sha256": "05532a4cce8673780bab047f34fd37c1d89290f97641f76514dc550e039d379f",
+   "date": "2026-11-18T18:51:04+00:00",
+   "gear": [
+    [
+     226976,
+     0
+    ],
+    [
+     22403,
+     0
+    ],
+    [
+     226969,
+     0
+    ],
+    [
+     272411,
+     0
+    ],
+    [
+     226973,
+     0
+    ],
+    [
+     12936,
+     0
+    ],
+    [
+     226975,
+     0
+    ],
+    [
+     226971,
+     0
+    ],
+    [
+     226972,
+     0
+    ],
+    [
+     287033,
+     0
+    ],
+    [
+     22339,
+     0
+    ],
+    [
+     22433,
+     0
+    ],
+    [
+     272437,
+     0
+    ],
+    [
+     13965,
+     0
+    ],
+    [
+     22332,
+     0
+    ],
+    [
+     13375,
+     0
+    ],
+    [
+     23203,
+     0
+    ]
+   ],
+   "ench": {
+    "0": 2544,
+    "3": 7667,
+    "4": 1891,
+    "5": 7665,
+    "6": 2613,
+    "8": 2544,
+    "9": 929,
+    "14": 2504,
+    "15": 7603
+   },
+   "desc": {
+    "head": "Soulforge Greathelm",
+    "neck": "Nacreous Shell Necklace",
+    "shoulder": "Soulforge Spaulders",
+    "back": "Arcanoweave Cloak",
+    "chest": "Soulforge Breastplate",
+    "wrist": "Battleborn Armbraces",
+    "hands": "Soulforge Gauntlets",
+    "waist": "Soulforge Belt",
+    "legs": "Soulforge Legplates",
+    "feet": "Furbolg Berserker's Boots",
+    "finger1": "Rune Band of Wizardry",
+    "finger2": "Don Mauricio's Band of Domination",
+    "trinket1": "Adaptive Combat Assistant",
+    "trinket2": "Blackhand's Breadth",
+    "main_hand": "Blade of Necromancy",
+    "off_hand": "Crest of Retribution",
+    "ranged": "Libram of Fervor"
+   },
+   "eval": {
+    "Dps": 657.2026856726493,
+    "Tps": 1627.0616326032125,
+    "Dtps": 381.9783629597709,
+    "Tmi": 72.61547926267421,
+    "Cod": 9.999999999999999e-05,
+    "DpsSd": 22.400208206358386,
+    "TpsSd": 56.467155064887315,
+    "DtpsSd": 32.27439242803611,
+    "TmiSd": 9.56903523992952
+   },
+   "final_iters": 10000,
+   "final": [
+    304,
+    228,
+    335,
+    269,
+    365,
+    553,
+    0,
+    0,
+    0,
+    40,
+    0,
+    0,
+    0,
+    199,
+    1035,
+    40,
+    0,
+    50,
+    70,
+    0,
+    0,
+    31,
+    12,
+    6,
+    38,
+    0,
+    0,
+    7528.92,
+    72.8,
+    4951,
+    5267,
+    91,
+    42,
+    35,
+    35,
+    35,
+    68,
+    0,
+    835
+   ],
+   "sets": [
+    "Soulforge Armor (2pc)",
+    "Soulforge Armor (3pc)",
+    "Soulforge Armor (4pc)",
+    "Soulforge Armor (6pc)"
+   ],
+   "seeds": {
+    "best_not05": 1615.226,
+    "pvp6_champion": 1615.226,
+    "t05_dps8": 1628.04
+   },
+   "best_seed": "t05_dps8",
+   "excluded": [
+    {
+     "slot": "legs",
+     "id": 252606,
+     "name": "Pristine Scorpid Leggings",
+     "reason": "not plate",
+     "ep_gain": 34.18
+    },
+    {
+     "slot": "legs",
+     "id": 250598,
+     "name": "Champion's Legplates",
+     "reason": "no allowed source",
+     "ep_gain": 34.01
+    },
+    {
+     "slot": "main_hand",
+     "id": 22383,
+     "name": "Sageblade",
+     "reason": "name pattern 'Sageblade'",
+     "ep_gain": 24.96
+    },
+    {
+     "slot": "head",
+     "id": 250599,
+     "name": "Stalwart Helm",
+     "reason": "name pattern 'Stalwart'",
+     "ep_gain": 18.72
+    },
+    {
+     "slot": "main_hand",
+     "id": 2243,
+     "name": "Hand of Edward the Odd",
+     "reason": "world BoE epic",
+     "ep_gain": 16.11
+    },
+    {
+     "slot": "finger1",
+     "id": 284716,
+     "name": "Band of the Better Half",
+     "reason": "item blocklist",
+     "ep_gain": 14.1
+    },
+    {
+     "slot": "trinket2",
+     "id": 20512,
+     "name": "Sanctified Orb",
+     "reason": "no allowed source",
+     "ep_gain": 13.55
+    },
+    {
+     "slot": "waist",
+     "id": 18405,
+     "name": "Belt of the Archmage",
+     "reason": "not plate",
+     "ep_gain": 8.93
+    },
+    {
+     "slot": "finger1",
+     "id": 275982,
+     "name": "Warden's Signet of Brilliance",
+     "reason": "limit category 710",
+     "ep_gain": 8.42
+    },
+    {
+     "slot": "head",
+     "id": 12640,
+     "name": "Lionheart Helm",
+     "reason": "no allowed source",
+     "ep_gain": 7.04
+    },
+    {
+     "slot": "wrist",
+     "id": 19595,
+     "name": "Dryad's Wrist Bindings",
+     "reason": "epic BG/PvP reward",
+     "ep_gain": 6.2
+    },
+    {
+     "slot": "off_hand",
+     "id": 279262,
+     "name": "Evergreen Shield",
+     "reason": "no allowed source",
+     "ep_gain": 5.71
+    },
+    {
+     "slot": "off_hand",
+     "id": 1169,
+     "name": "Blackskull Shield",
+     "reason": "world BoE epic",
+     "ep_gain": 4.63
+    },
+    {
+     "slot": "waist",
+     "id": 252590,
+     "name": "Skirmisher's Mail Belt",
+     "reason": "not plate",
+     "ep_gain": 4.51
+    },
+    {
+     "slot": "wrist",
+     "id": 19596,
+     "name": "Dryad's Wrist Bindings",
+     "reason": "epic BG/PvP reward",
+     "ep_gain": 4.38
+    }
+   ],
+   "elapsed_s": 229.6,
+   "seed_from": "2026-11-18_prot_bis/tps_not05",
+   "job_id": "20261118-134714-optimize-9d7f"
+  }
+ }
+}

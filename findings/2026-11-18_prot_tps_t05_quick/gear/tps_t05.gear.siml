@@ -1,0 +1,19 @@
+siml 1
+// 2026-11-18_prot_tps_t05_quick/tps_t05 | rules prot_v3 | sim b83fe9df | 2026-11-18 | TPS 1627, DPS 657, DTPS 382.0, TMI 72.6
+head       soulforge_greathelm + arcanum_of_focus
+neck       nacreous_shell_necklace
+shoulder   soulforge_spaulders_ilvl65
+back       arcanoweave_cloak + cloak_agility
+chest      soulforge_breastplate_ilvl60 + chest_greater_stats
+wrist      battleborn_armbraces + bracer_greater_spellpower
+hands      soulforge_gauntlets_ilvl55 + gloves_threat
+waist      soulforge_belt_ilvl65
+legs       soulforge_legplates_ilvl66 + arcanum_of_focus
+feet       furbolg_berserkers_boots + boots_greater_stamina
+finger1    rune_band_of_wizardry
+finger2    don_mauricios_band_of_domination
+trinket1   adaptive_combat_assistant
+trinket2   blackhands_breadth
+main_hand  blade_of_necromancy + weapon_spell_power
+off_hand   crest_of_retribution + shield_law_of_nature
+ranged     libram_of_fervor

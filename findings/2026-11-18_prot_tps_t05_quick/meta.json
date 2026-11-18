@@ -1,0 +1,130 @@
+{
+ "id": "2026-11-18_prot_tps_t05_quick",
+ "topic": "prot tps t05 quick",
+ "date": "2026-11-18",
+ "status": "findings",
+ "spec": "prot_paladin",
+ "sim_sha": "b83fe9df5fcd04d08061514332105ad9b769971d",
+ "db_json_sha256": "05532a4cce8673780bab047f34fd37c1d89290f97641f76514dc550e039d379f",
+ "budget": "quick",
+ "race": "RaceUndead",
+ "encounter": "boss",
+ "rules_profile": "prot_v3",
+ "rules_sha256": "8c3240ef86a14ab145ba199058901c7343caf173c8a5abe43f636bc343b59671",
+ "note": null,
+ "sets": {
+  "tps_t05": {
+   "objective": "tps",
+   "t05": true,
+   "rules": "prot_v3",
+   "rules_sha256": "8c3240ef86a14ab145ba199058901c7343caf173c8a5abe43f636bc343b59671",
+   "budget": "quick",
+   "metrics": {
+    "Dps": 657.2,
+    "Tps": 1627.06,
+    "Dtps": 381.98,
+    "Tmi": 72.62,
+    "Cod": 0.0
+   },
+   "hp": 4951,
+   "gear_file": "gear/tps_t05.gear.siml"
+  }
+ },
+ "rules_snapshot": {
+  "description": "Horde prot paladin, pre-raid + dungeons + PvP rank gear. No raid drops or raid rep, no Alliance items, no premier (ilvl 65+) PvP epics, no epic BG rep rewards, no Darkspear epics, no world BoE epics, no epic crafts, no random-suffix items, no other classes' Sunken Temple quest rewards, no Band of the Better Half or Elemental Focus Band.",
+  "faction": "horde",
+  "race": "RaceUndead",
+  "armor_slots_plate_only": true,
+  "exclude_raid_zones": [
+   3428,
+   3456,
+   2677,
+   2717,
+   3429,
+   1977,
+   2159
+  ],
+  "exclude_drop_difficulties": [
+   2
+  ],
+  "exclude_rep_factions": [
+   910
+  ],
+  "exclude_limit_categories": [
+   710
+  ],
+  "exclude_name_patterns": [
+   "Stalwart",
+   "Sageblade",
+   "Enchanted Thorium",
+   "Chromatic",
+   "Onyxia",
+   "Dragonslayer",
+   "Quel'Serrar",
+   "High Warlord"
+  ],
+  "exclude_alliance_patterns": [
+   "Marshal",
+   "Knight",
+   "Lieutenant Commander",
+   "Master Sergeant",
+   "Sergeant Major",
+   "Corporal",
+   "Private",
+   "Commander's",
+   "Sentinel's",
+   "Silverwing",
+   "Stormpike",
+   "Highlander's",
+   "Arathor",
+   "Chevalier",
+   "Luminous",
+   "Alliance"
+  ],
+  "exclude_premier_epic_pvp": {
+   "name_prefix": "Premier",
+   "min_ilvl": 65
+  },
+  "exclude_epic_bg_rep": {
+   "vendors": [
+    "Kelm Hargunth",
+    "Rutherford Twing",
+    "Gaelden Hammersmith",
+    "Thanthaldis Snowgleam",
+    "Jekyll Flandring",
+    "Brakgul Deathbringer",
+    "Samuel Hawke",
+    "Illiyana Moonblaze"
+   ],
+   "source_substrings": [
+    "Alterac"
+   ],
+   "name_prefixes": [
+    "Defiler's",
+    "Outrider's",
+    "Frostwolf",
+    "Warsong",
+    "Highlander's"
+   ]
+  },
+  "exclude_darkspear_epics": {
+   "rep_faction": 2798,
+   "min_quality": 4
+  },
+  "exclude_world_boe_epics": {
+   "max_unsourced_id": 200000
+  },
+  "exclude_quest_ids": [
+   8413,
+   8422,
+   8425
+  ],
+  "exclude_item_ids": [
+   284716,
+   20682
+  ],
+  "exclude_epic_crafts": true,
+  "exclude_random_suffix": true,
+  "allow_unknown_source": true
+ }
+}
