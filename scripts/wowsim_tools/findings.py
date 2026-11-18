@@ -188,6 +188,11 @@ def write(fid, topic, sets, base, common, note=None, siml_texts=None, extra_file
     res = {"sets": {}}
     meta = {"id": fid, "topic": topic, "date": fid[:10], "status": "findings", **common,
             "note": note, "sets": {}}
+    try:
+        # The profile as simmed, so a later rules change can be checked against it.
+        meta["rules_snapshot"] = Rules(common["rules_profile"]).data
+    except (RulesError, KeyError):
+        pass
     for name, r in sets.items():
         r = dict(r, _set=name)
         meta["sets"][name] = _set_meta(r)
@@ -216,6 +221,64 @@ def save_job_result(result, topic, base, set_name=None):
     common = {k: result.get(k) for k in ("spec", "sim_sha", "db_json_sha256", "budget", "race", "encounter")}
     common.update(rules_profile=result["rules"], rules_sha256=result["rules_sha256"])
     return write(new_id(topic), topic, {name: result}, base, common)
+
+
+# --- rules rebase ---------------------------------------------------------------
+
+
+def rebase_rules(fid, ctx, old_data=None):
+    """Re-stamp a finding with its rules profile's current hash, when that is sound.
+
+    Sound means: the current profile only removes items compared with the one
+    the finding was simmed under (every pool item it allows, the old one
+    allowed too, with T0.5 on and off), and no saved set holds a removed item.
+    A set that was best over the old allowed items and is still allowed is
+    then still best over the new ones. Anything else raises: re-sim instead.
+
+    old_data is the old profile; by default the finding's rules_snapshot.
+    """
+    meta, res = load(fid)
+    rname = meta["rules_profile"]
+    old_data = old_data or meta.get("rules_snapshot")
+    if old_data is None:
+        raise FindingError(f"{fid} has no rules_snapshot; pass the profile it was simmed under")
+    old = Rules(rname, old_data)
+    new = ctx.rules
+    if new.name != rname:
+        raise FindingError(f"{fid} uses rules {rname!r}, the context has {new.name!r}")
+    stamped = {sm.get("rules_sha256") or meta["rules_sha256"] for sm in meta["sets"].values()}
+    if stamped != {old.sha256}:
+        raise FindingError(f"the old profile hashes to {old.sha256[:8]}, but {fid} is stamped "
+                           f"{', '.join(s[:8] for s in stamped)}")
+    if new.sha256 == old.sha256:
+        return f"{fid}: rules unchanged, nothing to do"
+    t05_set = ctx.t05_set
+    widened = [c["name"] for c in ctx.pool for t in (True, False)
+               if new.allowed(c, t, t05_set) and not old.allowed(c, t, t05_set)]
+    if widened:
+        raise FindingError(f"the new {rname} allows items the old one did not "
+                           f"(e.g. {', '.join(sorted(set(widened))[:5])}); re-sim instead")
+    for name, r in res["sets"].items():
+        g = Gear.from_json(r)
+        for s, k in enumerate(g.items):
+            if k and not new.allowed(ctx.cand(k), r["t05"], t05_set):
+                raise FindingError(f"{name}: {db().name(k[0])} ({SLOTS[s]}) is excluded by the "
+                                   f"new {rname}; re-sim instead")
+    removed = sorted({c["name"] for c in ctx.pool for t in (True, False)
+                      if old.allowed(c, t, t05_set) and not new.allowed(c, t, t05_set)})
+    for name in meta["sets"]:
+        meta["sets"][name]["rules_sha256"] = new.sha256
+        res["sets"][name]["rules_sha256"] = new.sha256
+    meta["rules_sha256"] = new.sha256
+    meta["rules_snapshot"] = new.data
+    line = (f"Rules {rname} rebased on {date.today().isoformat()} from {old.sha256[:8]} to "
+            f"{new.sha256[:8]}: the new profile only removes items "
+            f"({', '.join(removed[:6])}{'…' if len(removed) > 6 else ''}), and no set holds one.")
+    meta["note"] = f"{meta.get('note') or ''} {line}".strip()
+    _write(ROOT / fid / "meta.json", meta)
+    _write(ROOT / fid / "result.json", res)
+    (ROOT / fid / "summary.md").write_text(summary_md(meta, res), encoding="utf-8")
+    return line
 
 
 # --- prototype import -----------------------------------------------------------

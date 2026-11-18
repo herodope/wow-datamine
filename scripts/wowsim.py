@@ -14,11 +14,13 @@
     python scripts/wowsim.py findings [<id>[/<set>]]
     python scripts/wowsim.py save <job id> --topic "prot tps t05"
     python scripts/wowsim.py import-prototype wowsim-kit/findings_nov18_2026
+    python scripts/wowsim.py rebase-rules <finding id> [--old-profile old.json]
 
 --gear takes .gear.siml file paths, findings set ids, job ids, or 'preset'.
 """
 
 import argparse
+import json
 import sys
 import time
 from pathlib import Path
@@ -100,6 +102,10 @@ def main():
     p.add_argument("--set-name")
     p = sub.add_parser("import-prototype")
     p.add_argument("kit_dir")
+    p = sub.add_parser("rebase-rules")
+    p.add_argument("finding_id")
+    p.add_argument("--old-profile", help="the profile JSON the finding was simmed under "
+                                         "(default: its rules_snapshot)")
 
     a = ap.parse_args()
     common = dict(spec=a.spec, race=a.race, rules=a.rules)
@@ -137,6 +143,11 @@ def main():
         print(api.findings_get(a.finding_id) if a.finding_id else api.findings_list())
     elif c == "save":
         print(api.findings_save(a.job_id, a.topic, a.set_name))
+    elif c == "rebase-rules":
+        meta, _ = findings.load(a.finding_id)
+        ctx = api.context(meta.get("spec"), meta["rules_profile"], a.race, log=print)
+        old = json.loads(Path(a.old_profile).read_text(encoding="utf-8")) if a.old_profile else None
+        print(findings.rebase_rules(a.finding_id, ctx, old))
     elif c == "import-prototype":
         ctx = api.context(a.spec, a.rules or "prot_v3", a.race, log=print)
         print("imported", findings.import_prototype(Path(a.kit_dir), ctx))

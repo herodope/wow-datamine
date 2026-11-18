@@ -22,6 +22,11 @@ reports/
 bin/
 sim_out/
 
+# The wowsim prototype kit (plan, prototype code, Nov 18 2026 results). Its own
+# local git repo with no remote; scripts/wowsim_accept.py reads its findings.
+wowsim-kit/
+wowsim-kit.zip
+
 # Quest XP sweep. A separate local project, not part of the datamine.
 questxp/
 

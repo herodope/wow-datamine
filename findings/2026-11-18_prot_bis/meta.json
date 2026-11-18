@@ -7,17 +7,17 @@
  "sim_sha": "b83fe9df5fcd04d08061514332105ad9b769971d",
  "db_json_sha256": "05532a4cce8673780bab047f34fd37c1d89290f97641f76514dc550e039d379f",
  "rules_profile": "prot_v3",
- "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+ "rules_sha256": "8c3240ef86a14ab145ba199058901c7343caf173c8a5abe43f636bc343b59671",
  "budget": "prototype (mixed)",
  "race": "RaceUndead",
  "encounter": "boss",
- "note": "Imported from the Nov 18 2026 prototype run. The db hash is the sim's db.json at the same commit. `dtps` was optimized under the prototype's v2 rules, a superset of prot_v3; every item in it is allowed under prot_v3.",
+ "note": "Imported from the Nov 18 2026 prototype run. The db hash is the sim's db.json at the same commit. `dtps` was optimized under the prototype's v2 rules, a superset of prot_v3; every item in it is allowed under prot_v3. Rules prot_v3 rebased on 2026-11-18 from 6f111c22 to 8c3240ef: the new profile only removes items (Elemental Focus Band), and no set holds one.",
  "sets": {
   "dtps": {
    "objective": "dtps",
    "t05": false,
    "rules": "prot_v3",
-   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "rules_sha256": "8c3240ef86a14ab145ba199058901c7343caf173c8a5abe43f636bc343b59671",
    "budget": "prototype",
    "metrics": {
     "Dps": 427.09,
@@ -33,7 +33,7 @@
    "objective": "tps",
    "t05": true,
    "rules": "prot_v3",
-   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "rules_sha256": "8c3240ef86a14ab145ba199058901c7343caf173c8a5abe43f636bc343b59671",
    "budget": "prototype",
    "metrics": {
     "Dps": 656.59,
@@ -49,7 +49,7 @@
    "objective": "tps",
    "t05": false,
    "rules": "prot_v3",
-   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "rules_sha256": "8c3240ef86a14ab145ba199058901c7343caf173c8a5abe43f636bc343b59671",
    "budget": "prototype",
    "metrics": {
     "Dps": 640.13,
@@ -65,7 +65,7 @@
    "objective": "dps",
    "t05": true,
    "rules": "prot_v3",
-   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "rules_sha256": "8c3240ef86a14ab145ba199058901c7343caf173c8a5abe43f636bc343b59671",
    "budget": "prototype",
    "metrics": {
     "Dps": 669.11,
@@ -81,7 +81,7 @@
    "objective": "dps",
    "t05": false,
    "rules": "prot_v3",
-   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "rules_sha256": "8c3240ef86a14ab145ba199058901c7343caf173c8a5abe43f636bc343b59671",
    "budget": "prototype",
    "metrics": {
     "Dps": 645.95,
@@ -93,5 +93,102 @@
    "hp": 4481,
    "gear_file": "gear/dps_not05.gear.siml"
   }
+ },
+ "rules_snapshot": {
+  "description": "Horde prot paladin, pre-raid + dungeons + PvP rank gear. No raid drops or raid rep, no Alliance items, no premier (ilvl 65+) PvP epics, no epic BG rep rewards, no Darkspear epics, no world BoE epics, no epic crafts, no random-suffix items, no other classes' Sunken Temple quest rewards, no Band of the Better Half or Elemental Focus Band.",
+  "faction": "horde",
+  "race": "RaceUndead",
+  "armor_slots_plate_only": true,
+  "exclude_raid_zones": [
+   3428,
+   3456,
+   2677,
+   2717,
+   3429,
+   1977,
+   2159
+  ],
+  "exclude_drop_difficulties": [
+   2
+  ],
+  "exclude_rep_factions": [
+   910
+  ],
+  "exclude_limit_categories": [
+   710
+  ],
+  "exclude_name_patterns": [
+   "Stalwart",
+   "Sageblade",
+   "Enchanted Thorium",
+   "Chromatic",
+   "Onyxia",
+   "Dragonslayer",
+   "Quel'Serrar",
+   "High Warlord"
+  ],
+  "exclude_alliance_patterns": [
+   "Marshal",
+   "Knight",
+   "Lieutenant Commander",
+   "Master Sergeant",
+   "Sergeant Major",
+   "Corporal",
+   "Private",
+   "Commander's",
+   "Sentinel's",
+   "Silverwing",
+   "Stormpike",
+   "Highlander's",
+   "Arathor",
+   "Chevalier",
+   "Luminous",
+   "Alliance"
+  ],
+  "exclude_premier_epic_pvp": {
+   "name_prefix": "Premier",
+   "min_ilvl": 65
+  },
+  "exclude_epic_bg_rep": {
+   "vendors": [
+    "Kelm Hargunth",
+    "Rutherford Twing",
+    "Gaelden Hammersmith",
+    "Thanthaldis Snowgleam",
+    "Jekyll Flandring",
+    "Brakgul Deathbringer",
+    "Samuel Hawke",
+    "Illiyana Moonblaze"
+   ],
+   "source_substrings": [
+    "Alterac"
+   ],
+   "name_prefixes": [
+    "Defiler's",
+    "Outrider's",
+    "Frostwolf",
+    "Warsong",
+    "Highlander's"
+   ]
+  },
+  "exclude_darkspear_epics": {
+   "rep_faction": 2798,
+   "min_quality": 4
+  },
+  "exclude_world_boe_epics": {
+   "max_unsourced_id": 200000
+  },
+  "exclude_quest_ids": [
+   8413,
+   8422,
+   8425
+  ],
+  "exclude_item_ids": [
+   284716,
+   20682
+  ],
+  "exclude_epic_crafts": true,
+  "exclude_random_suffix": true,
+  "allow_unknown_source": true
  }
 }

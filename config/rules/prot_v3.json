@@ -1,5 +1,5 @@
 {
-  "description": "Horde prot paladin, pre-raid + dungeons + PvP rank gear. No raid drops or raid rep, no Alliance items, no premier (ilvl 65+) PvP epics, no epic BG rep rewards, no Darkspear epics, no world BoE epics, no epic crafts, no random-suffix items, no other classes' Sunken Temple quest rewards.",
+  "description": "Horde prot paladin, pre-raid + dungeons + PvP rank gear. No raid drops or raid rep, no Alliance items, no premier (ilvl 65+) PvP epics, no epic BG rep rewards, no Darkspear epics, no world BoE epics, no epic crafts, no random-suffix items, no other classes' Sunken Temple quest rewards, no Band of the Better Half or Elemental Focus Band.",
   "faction": "horde",
   "race": "RaceUndead",
   "armor_slots_plate_only": true,
@@ -18,7 +18,7 @@
   "exclude_darkspear_epics": {"rep_faction": 2798, "min_quality": 4},
   "exclude_world_boe_epics": {"max_unsourced_id": 200000},
   "exclude_quest_ids": [8413, 8422, 8425],
-  "exclude_item_ids": [284716],
+  "exclude_item_ids": [284716, 20682],
   "exclude_epic_crafts": true,
   "exclude_random_suffix": true,
   "allow_unknown_source": true

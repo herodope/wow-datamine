@@ -28,6 +28,7 @@ HOTS = 13164            # Heart of the Scale: unique
 SIGNET = 275968         # Initiate's Signet of Ferocity: limit category 710
 FURY_VISOR = 20521      # warrior Sunken Temple quest reward
 BAND = 284716           # Band of the Better Half: item blocklist
+ELEMENTAL_FOCUS = 20682 # Elemental Focus Band: item blocklist
 GREATHELM = 226976      # Soulforge Greathelm (T0.5)
 
 
@@ -106,6 +107,7 @@ class RulesTest(unittest.TestCase):
 
     def test_exclusions(self):
         self.assertEqual(self.r.excluded_reason(self.cand(BAND)), "item blocklist")
+        self.assertEqual(self.r.excluded_reason(self.cand(ELEMENTAL_FOCUS)), "item blocklist")
         self.assertEqual(self.r.excluded_reason(self.cand(SIGNET)), "limit category 710")
         self.assertEqual(self.r.excluded_reason(self.cand(FURY_VISOR)), "quest blocklist")
         self.assertEqual(self.r.excluded_reason(self.cand(GREATHELM), t05=False, t05_set=1673),
@@ -148,6 +150,37 @@ class HarnessTest(unittest.TestCase):
         o = harness.one({"name": "x", "tschool": "Nope", "statsOnly": True},
                         harness.preset_path("prot_paladin"))
         self.assertIn("unknown spell school", o["Err"])
+
+    def test_rebase_refuses_wider_rules(self):
+        # An old profile stricter than the current one means the current one
+        # widens: a saved optimum may no longer be optimal, so no re-stamp.
+        from wowsim_tools import api, findings
+        from wowsim_tools.rules import Rules
+        fid = "2026-11-18_prot_bis"
+        if fid not in findings.ids():
+            self.skipTest("prototype finding not imported")
+        import shutil
+        import tempfile
+        ctx = api.context("prot_paladin", "prot_v3")
+        stricter = dict(Rules("prot_v3").data)
+        stricter["exclude_item_ids"] = stricter["exclude_item_ids"] + [ACA]
+        old_sha = Rules("prot_v3", stricter).sha256
+        real_root = findings.ROOT
+        with tempfile.TemporaryDirectory() as tmp:
+            # A copy of the finding, stamped as if simmed under the stricter profile.
+            shutil.copytree(real_root / fid, Path(tmp) / fid)
+            findings.ROOT = Path(tmp)
+            try:
+                meta, res = findings.load(fid)
+                meta["rules_sha256"] = old_sha
+                for n in meta["sets"]:
+                    meta["sets"][n]["rules_sha256"] = old_sha
+                findings._write(Path(tmp) / fid / "meta.json", meta)
+                with self.assertRaisesRegex(findings.FindingError, "allows items the old one did not"):
+                    findings.rebase_rules(fid, ctx, stricter)
+                self.assertEqual(findings.load(fid)[0]["rules_sha256"], old_sha)
+            finally:
+                findings.ROOT = real_root
 
     def test_findings_staleness(self):
         from wowsim_tools import findings

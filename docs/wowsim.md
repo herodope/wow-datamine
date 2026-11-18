@@ -208,7 +208,8 @@ chosen item by EP, with the rule that excluded each.
 result and finding records the hash. `prot_v3` is the Horde Undead prot
 paladin profile: no raid drops or raid rep, no Alliance items, no premier
 PvP epics, no epic BG rep, no Darkspear epics, no world BoE epics, no epic
-crafts, no random suffixes, and no other classes' Sunken Temple quest rewards.
+crafts, no random suffixes, no other classes' Sunken Temple quest rewards, and
+neither Band of the Better Half nor Elemental Focus Band.
 Profiles are JSON, not YAML, so the pipeline stays stdlib-only.
 
 ## Findings
@@ -216,6 +217,16 @@ Profiles are JSON, not YAML, so the pipeline stays stdlib-only.
 Saved results are previous data, never ground truth. A finding is **stale**
 when the sim sha, the sim's `db.json` hash or its rules profile hash differs
 from the current one. Re-sim a stale finding before quoting it.
+
+A finding keeps a snapshot of its rules profile (`rules_snapshot` in
+`meta.json`). After a profile edit that only adds exclusions,
+`python scripts/wowsim.py rebase-rules <finding>` re-stamps it with the new
+hash, and refuses unless both hold: every pool item the new profile allows,
+the old one allowed too; and no saved set holds a newly excluded item. A set
+that was best over the old items and is still allowed is then still best over
+the new ones. Any other rules change means a re-sim. For a finding with no
+snapshot, pass the old profile with `--old-profile` (e.g. from `git show`); its
+hash must match the finding's stamp.
 
 `2026-11-18_prot_bis` holds the prototype run on sim `b83fe9df` under
 `prot_v3`: the five sets `dtps`, `tps_t05`, `tps_not05`, `dps_t05`,
@@ -252,7 +263,9 @@ recorded value; Heart of the Scale vs Heart of Wyrmthalak within ±1 DPS; a
 `quick` TPS T0.5 optimize, started through the MCP server, under 5 minutes and
 within 1% of 1619 TPS; that the job survives the server exiting; and the
 `wow-datamine` query latency idle and during the job. It reads the prototype
-files from `wowsim-kit/findings_nov18_2026/`.
+files from `wowsim-kit/findings_nov18_2026/`, a local folder the repo ignores
+(its own git repository, with no remote); on a machine without it, the
+re-sim checks fail.
 
 Claude Desktop through the remote-devices bridge is not covered by the script:
 restart Desktop and call `sim_gear` from a chat.

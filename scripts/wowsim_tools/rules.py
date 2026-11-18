@@ -49,15 +49,22 @@ def list_profiles():
     return sorted(p.stem for p in config.RULES_DIR.glob("*.json"))
 
 
+def profile_sha256(data):
+    canon = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canon.encode()).hexdigest()
+
+
 class Rules:
-    def __init__(self, name):
-        path = config.RULES_DIR / f"{name}.json"
-        if not path.exists():
-            raise RulesError(f"no rules profile {name!r}; known: {', '.join(list_profiles())}")
+    def __init__(self, name, data=None):
+        """The profile config/rules/<name>.json, or `data` (a snapshot) under that name."""
+        if data is None:
+            path = config.RULES_DIR / f"{name}.json"
+            if not path.exists():
+                raise RulesError(f"no rules profile {name!r}; known: {', '.join(list_profiles())}")
+            data = json.loads(path.read_text(encoding="utf-8"))
         self.name = name
-        self.data = json.loads(path.read_text(encoding="utf-8"))
-        canon = json.dumps(self.data, sort_keys=True, separators=(",", ":"))
-        self.sha256 = hashlib.sha256(canon.encode()).hexdigest()
+        self.data = data
+        self.sha256 = profile_sha256(self.data)
         r = self.data
         faction = r.get("faction", "horde")
         if faction not in FACTION_CODE:
