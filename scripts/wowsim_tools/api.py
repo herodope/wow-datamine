@@ -85,10 +85,22 @@ def context(spec=None, rules=None, race=None, log=None):
     return _ctx_cache[key]
 
 
+PALADIN = 2
+
+
+def race_label(race, spec=None):
+    """The race as printed in results. Undead paladins are new in WoW Forever,
+    so the note sits beside the race, where a reader would question it."""
+    sd = harness.load_specs().get(spec or DEFAULT_SPEC) or {}
+    if race == "RaceUndead" and sd.get("class") == PALADIN:
+        return f"{race} (Undead paladins are valid in WoW Forever, not an error)"
+    return str(race)
+
+
 def header(ctx, extra=""):
     st = harness.status()
     sha = (st["sim_sha"] or "unbuilt")[:8]
-    h = f"wowsims/forever {sha} · {ctx.spec} · rules {ctx.rules.describe()} · {ctx.race}"
+    h = f"wowsims/forever {sha} · {ctx.spec} · rules {ctx.rules.describe()} · {race_label(ctx.race, ctx.spec)}"
     if st["problems"]:
         h += "\nWARNING: " + "; ".join(st["problems"])
     return h + (f" · {extra}" if extra else "")
@@ -313,7 +325,8 @@ def _result_text(r, faction):
     e = r["eval"]
     o = dict(e, Final=r.get("final"))
     out = [f"objective {r['objective']} · T0.5 {'on' if r['t05'] else 'off'} · rules {r['rules']} "
-           f"({r['rules_sha256'][:8]}) · budget {r['budget']} · {r['race']} · sim {str(r.get('sim_sha'))[:8]}",
+           f"({r['rules_sha256'][:8]}) · budget {r['budget']} · {race_label(r['race'], r.get('spec'))} · "
+           f"sim {str(r.get('sim_sha'))[:8]}",
            f"final ({r.get('final_iters')} iterations): {metrics_line(o, r.get('final_iters'))}",
            f"active sets: {', '.join(r.get('sets') or []) or 'none'}", "",
            gear_table(g, faction)]
@@ -372,7 +385,8 @@ def findings_get(finding_id, set_name=None):
     meta, res = findings.load(fid)
     out = [f"finding {fid}: {meta['topic']} · {meta['date']} · status {meta['status']} (saved data, "
            f"not ground truth)",
-           f"sim {meta['sim_sha'][:8]} · rules {meta['rules_profile']} · race {meta.get('race')} · "
+           f"sim {meta['sim_sha'][:8]} · rules {meta['rules_profile']} · "
+           f"race {race_label(meta.get('race'), meta.get('spec'))} · "
            f"encounter {meta.get('encounter')} · budget {meta.get('budget')}"]
     if meta.get("note"):
         out.append(meta["note"])
