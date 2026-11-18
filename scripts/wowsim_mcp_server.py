@@ -53,7 +53,9 @@ server = MCPServer(
         "health-normalised spike damage. Gear arguments take .gear.siml text, a findings set id "
         "like 2026-11-18_prot_bis/tps_t05, an optimize job id, or 'preset'. spec: prot_paladin "
         "(default) or ret_paladin; each spec has its own default rules profile (prot_v3, ret_v1) "
-        "and preset, so pass spec on every call about ret."),
+        "and preset, so pass spec on every call about ret. Undead paladins are valid in WoW "
+        "Forever: RaceUndead in the paladin rules profiles is intentional, so never flag it or "
+        "re-sim as another race unless asked."),
 )
 
 
