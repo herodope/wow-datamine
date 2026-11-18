@@ -1,0 +1,97 @@
+{
+ "id": "2026-11-18_prot_bis",
+ "topic": "Prot paladin BiS (prototype, prot_v3)",
+ "date": "2026-11-18",
+ "status": "findings",
+ "spec": "prot_paladin",
+ "sim_sha": "b83fe9df5fcd04d08061514332105ad9b769971d",
+ "db_json_sha256": "05532a4cce8673780bab047f34fd37c1d89290f97641f76514dc550e039d379f",
+ "rules_profile": "prot_v3",
+ "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+ "budget": "prototype (mixed)",
+ "race": "RaceUndead",
+ "encounter": "boss",
+ "note": "Imported from the Nov 18 2026 prototype run. The db hash is the sim's db.json at the same commit. `dtps` was optimized under the prototype's v2 rules, a superset of prot_v3; every item in it is allowed under prot_v3.",
+ "sets": {
+  "dtps": {
+   "objective": "dtps",
+   "t05": false,
+   "rules": "prot_v3",
+   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "budget": "prototype",
+   "metrics": {
+    "Dps": 427.09,
+    "Tps": 1022.51,
+    "Dtps": 199.51,
+    "Tmi": 41.7,
+    "Cod": 0
+   },
+   "hp": 4801,
+   "gear_file": "gear/dtps.gear.siml"
+  },
+  "tps_t05": {
+   "objective": "tps",
+   "t05": true,
+   "rules": "prot_v3",
+   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "budget": "prototype",
+   "metrics": {
+    "Dps": 656.59,
+    "Tps": 1619.06,
+    "Dtps": 379.54,
+    "Tmi": 75.93,
+    "Cod": 0.0
+   },
+   "hp": 4761,
+   "gear_file": "gear/tps_t05.gear.siml"
+  },
+  "tps_not05": {
+   "objective": "tps",
+   "t05": false,
+   "rules": "prot_v3",
+   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "budget": "prototype",
+   "metrics": {
+    "Dps": 640.13,
+    "Tps": 1580.92,
+    "Dtps": 391.14,
+    "Tmi": 85.33,
+    "Cod": 0.0
+   },
+   "hp": 4461,
+   "gear_file": "gear/tps_not05.gear.siml"
+  },
+  "dps_t05": {
+   "objective": "dps",
+   "t05": true,
+   "rules": "prot_v3",
+   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "budget": "prototype",
+   "metrics": {
+    "Dps": 669.11,
+    "Tps": 1604.67,
+    "Dtps": 378.17,
+    "Tmi": 74.35,
+    "Cod": 0
+   },
+   "hp": 4821,
+   "gear_file": "gear/dps_t05.gear.siml"
+  },
+  "dps_not05": {
+   "objective": "dps",
+   "t05": false,
+   "rules": "prot_v3",
+   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "budget": "prototype",
+   "metrics": {
+    "Dps": 645.95,
+    "Tps": 1554.72,
+    "Dtps": 389.22,
+    "Tmi": 84.49,
+    "Cod": 0.0
+   },
+   "hp": 4481,
+   "gear_file": "gear/dps_not05.gear.siml"
+  }
+ }
+}

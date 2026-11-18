@@ -1,0 +1,20 @@
+siml 1
+// v2_protpally_DTPS | v2 rules (no epic pvp/BG rep epics, no world epics, no watchers signets, no enchanted thorium) | DTPS 200, TMI 41.7, TPS 1023, DPS 427, HP 4801, armor 7931
+
+head       helm_of_awareness + lesser_arcane_amalgamation_1508
+neck       talisman_of_evasion
+shoulder   stoneform_shoulders
+back       cloak_of_warding + cloak_dodge
+chest      warriors_embrace + chest_greater_stats
+wrist      iron_wrought_cuffs + bracer_superior_deflection
+hands      deathbone_gauntlets + gloves_superior_agility
+waist      deathbone_girdle
+legs       legplates_of_the_eternal_guardian + lesser_arcane_amalgamation_1508
+feet       shalehusk_boots + boots_greater_agility
+finger1    ring_of_awareness
+finger2    band_of_the_steadfast_hero
+trinket1   defenders_grip_stabilizer
+trinket2   arena_grand_master
+main_hand  the_hand_of_antusul + weapon_agility
+off_hand   barrier_shield + shield_lesser_block
+ranged     libram_of_fervor

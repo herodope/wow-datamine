@@ -256,3 +256,46 @@ FAILURE_REASONS = (
     FAILURE_BAD_BLTE,
     FAILURE_UNKNOWN_FORMAT,
 )
+
+
+# --- Sim (wowsims/forever) --------------------------------------------------
+#
+# The wowsim MCP server and scripts/wowsim_tools/. Separate from the datamine:
+# the sim reads its own item database (vendor/forever/assets/database), not
+# wow.db, and is versioned by the wowsims commit, not by the WoW build.
+
+SIM_REPO_URL = "https://github.com/wowsims/forever.git"
+SIM_DIR = VENDOR_DIR / "forever"
+# The commit build_sim.py checks out. Every finding records the sha it was
+# simmed on; moving the pin marks older findings stale.
+SIM_PIN = "b83fe9df5fcd04d08061514332105ad9b769971d"
+SIM_DB_JSON = SIM_DIR / "assets" / "database" / "db.json"
+SIM_DB_BIN = SIM_DIR / "assets" / "database" / "db.bin"
+
+# Repo-local toolchains, so a build changes nothing outside vendor/. Hashes are
+# the ones go.dev and the GitHub release publish for these exact files.
+TOOLCHAIN_DIR = VENDOR_DIR / "toolchains"
+GO_VERSION = "1.27.3"
+GO_ZIP = {"name": "go1.27.3.windows-amd64.zip",
+          "url": "https://go.dev/dl/go1.27.3.windows-amd64.zip",
+          "sha256": "f26081f438319757f8a1b46d7d0b2c5ec7583d4038e485e0aa725cfde7885fff"}
+PROTOC_VERSION = "36.2"     # the version the sim's CI pins
+PROTOC_ZIP = {"name": "protoc-36.2-win64.zip",
+              "url": "https://github.com/protocolbuffers/protobuf/releases/download/v36.2/protoc-36.2-win64.zip",
+              "sha256": "f0c128dc0d8492eceece83bb459a4c0e316764b929ffbf1aa416357fd644edd3"}
+# Matches google.golang.org/protobuf in the sim's go.mod.
+PROTOC_GEN_GO_VERSION = "v1.36.12"
+
+HARNESS_DIR = REPO_ROOT / "bisrun"        # committed — Go batch harness module
+SIM_BIN_DIR = REPO_ROOT / "bin"           # gitignored — bisrun, wowsimcli, build_info.json
+SIM_CONFIG_DIR = REPO_ROOT / "config"
+RULES_DIR = SIM_CONFIG_DIR / "rules"      # committed — exclusion-rule profiles
+PRESETS_DIR = SIM_CONFIG_DIR / "presets"  # committed — base RaidSimRequest per spec
+SIM_FINDINGS_DIR = REPO_ROOT / "findings" # committed — saved sim results (previous data)
+# Not under out/: scripts treat every out/ subfolder as a build directory.
+SIM_STATE_DIR = REPO_ROOT / "sim_out"     # gitignored — pool cache, background jobs
+SIM_JOBS_DIR = SIM_STATE_DIR / "jobs"
+SIM_POOL_DIR = SIM_STATE_DIR / "pool"
+
+# Sim concurrency is CPU-bound, unlike extraction: one worker per core.
+SIM_WORKERS = _os.cpu_count() or 2

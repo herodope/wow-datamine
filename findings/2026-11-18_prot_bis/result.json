@@ -1,0 +1,846 @@
+{
+ "sets": {
+  "dtps": {
+   "tag": "v2_Dtps_not05",
+   "gear": [
+    [
+     18313,
+     0
+    ],
+    [
+     13177,
+     0
+    ],
+    [
+     13955,
+     0
+    ],
+    [
+     18413,
+     0
+    ],
+    [
+     10845,
+     0
+    ],
+    [
+     287023,
+     0
+    ],
+    [
+     14622,
+     0
+    ],
+    [
+     14620,
+     0
+    ],
+    [
+     11927,
+     0
+    ],
+    [
+     11787,
+     0
+    ],
+    [
+     272409,
+     0
+    ],
+    [
+     22331,
+     0
+    ],
+    [
+     272440,
+     0
+    ],
+    [
+     19024,
+     0
+    ],
+    [
+     9639,
+     0
+    ],
+    [
+     18499,
+     0
+    ],
+    [
+     23203,
+     0
+    ]
+   ],
+   "ench": {
+    "0": 1508,
+    "8": 1508,
+    "3": 2622,
+    "4": 1891,
+    "5": 8214,
+    "6": 2564,
+    "9": 1887,
+    "14": 2564,
+    "15": 863
+   },
+   "desc": {
+    "head": "Helm of Awareness",
+    "neck": "Talisman of Evasion",
+    "shoulder": "Stoneform Shoulders",
+    "back": "Cloak of Warding",
+    "chest": "Warrior's Embrace",
+    "wrist": "Iron-Wrought Cuffs",
+    "hands": "Deathbone Gauntlets",
+    "waist": "Deathbone Girdle",
+    "legs": "Legplates of the Eternal Guardian",
+    "feet": "Shalehusk Boots",
+    "finger1": "Ring of Awareness",
+    "finger2": "Band of the Steadfast Hero",
+    "trinket1": "Defender's Grip Stabilizer",
+    "trinket2": "Arena Grand Master",
+    "main_hand": "The Hand of Antu'sul",
+    "off_hand": "Barrier Shield",
+    "ranged": "Libram of Fervor"
+   },
+   "eval": {
+    "Dps": 427.0903679656764,
+    "Tps": 1022.5145834186704,
+    "Dtps": 199.5085820669419,
+    "Tmi": 41.69547690057453,
+    "Cod": 0,
+    "DpsSd": 20.39292300075167,
+    "TpsSd": 47.45251769206571,
+    "DtpsSd": 23.809963054524513,
+    "TmiSd": 6.552692128629028
+   },
+   "final": [
+    189,
+    297,
+    320,
+    182,
+    36,
+    249,
+    0,
+    0,
+    0,
+    40,
+    0,
+    0,
+    0,
+    189,
+    805,
+    40,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    121,
+    20,
+    62,
+    84,
+    0,
+    7931.08,
+    634.4,
+    4801,
+    3962,
+    81,
+    27,
+    27,
+    27,
+    27,
+    60,
+    0,
+    835
+   ],
+   "sets": [
+    "Deathbone Guardian (2pc)"
+   ],
+   "objective": "dtps",
+   "metric": "Dtps",
+   "t05": false,
+   "rules": "prot_v3",
+   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "budget": "prototype",
+   "race": "RaceUndead",
+   "encounter": "boss",
+   "final_iters": 20000,
+   "source_tag": "v2_Dtps_not05"
+  },
+  "tps_t05": {
+   "tag": "v3_Tps_t05",
+   "gear": [
+    [
+     226976,
+     0
+    ],
+    [
+     22403,
+     0
+    ],
+    [
+     226969,
+     0
+    ],
+    [
+     272411,
+     0
+    ],
+    [
+     226973,
+     0
+    ],
+    [
+     12936,
+     0
+    ],
+    [
+     226975,
+     0
+    ],
+    [
+     226971,
+     0
+    ],
+    [
+     226972,
+     0
+    ],
+    [
+     287033,
+     0
+    ],
+    [
+     22339,
+     0
+    ],
+    [
+     272406,
+     0
+    ],
+    [
+     272437,
+     0
+    ],
+    [
+     13164,
+     0
+    ],
+    [
+     22332,
+     0
+    ],
+    [
+     13375,
+     0
+    ],
+    [
+     23203,
+     0
+    ]
+   ],
+   "ench": {
+    "0": 2544,
+    "8": 2544,
+    "3": 7667,
+    "4": 1891,
+    "5": 7665,
+    "6": 2613,
+    "9": 1887,
+    "14": 2504,
+    "15": 7603
+   },
+   "desc": {
+    "head": "Soulforge Greathelm",
+    "neck": "Nacreous Shell Necklace",
+    "shoulder": "Soulforge Spaulders",
+    "back": "Arcanoweave Cloak",
+    "chest": "Soulforge Breastplate",
+    "wrist": "Battleborn Armbraces",
+    "hands": "Soulforge Gauntlets",
+    "waist": "Soulforge Belt",
+    "legs": "Soulforge Legplates",
+    "feet": "Furbolg Berserker's Boots",
+    "finger1": "Rune Band of Wizardry",
+    "finger2": "Channeler's Ring",
+    "trinket1": "Adaptive Combat Assistant",
+    "trinket2": "Heart of the Scale",
+    "main_hand": "Blade of Necromancy",
+    "off_hand": "Crest of Retribution",
+    "ranged": "Libram of Fervor"
+   },
+   "eval": {
+    "Dps": 656.5922305400966,
+    "Tps": 1619.0557026220913,
+    "Dtps": 379.53503753330097,
+    "Tmi": 75.92517647723419,
+    "Cod": 0.0001,
+    "DpsSd": 22.189680067176127,
+    "TpsSd": 55.8204109065019,
+    "DtpsSd": 32.00241455858237,
+    "TmiSd": 10.146601430090177
+   },
+   "final": [
+    304,
+    236,
+    316,
+    284,
+    363,
+    551,
+    0,
+    0,
+    0,
+    40,
+    0,
+    0,
+    0,
+    199,
+    1035,
+    40,
+    0,
+    60,
+    56,
+    0,
+    0,
+    31,
+    12,
+    6,
+    38,
+    0,
+    0,
+    7544.92,
+    72.8,
+    4761,
+    5492,
+    91,
+    42,
+    35,
+    35,
+    35,
+    68,
+    0,
+    835
+   ],
+   "sets": [
+    "Soulforge Armor (2pc)",
+    "Soulforge Armor (3pc)",
+    "Soulforge Armor (4pc)",
+    "Soulforge Armor (6pc)"
+   ],
+   "objective": "tps",
+   "metric": "Tps",
+   "t05": true,
+   "rules": "prot_v3",
+   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "budget": "prototype",
+   "race": "RaceUndead",
+   "encounter": "boss",
+   "final_iters": 10000,
+   "source_tag": "v3_Tps_t05"
+  },
+  "tps_not05": {
+   "tag": "v3_Tps_not05",
+   "gear": [
+    [
+     250593,
+     0
+    ],
+    [
+     22403,
+     0
+    ],
+    [
+     250580,
+     0
+    ],
+    [
+     272411,
+     0
+    ],
+    [
+     13168,
+     0
+    ],
+    [
+     12936,
+     0
+    ],
+    [
+     280028,
+     0
+    ],
+    [
+     272404,
+     0
+    ],
+    [
+     13498,
+     0
+    ],
+    [
+     287033,
+     0
+    ],
+    [
+     22339,
+     0
+    ],
+    [
+     272406,
+     0
+    ],
+    [
+     272437,
+     0
+    ],
+    [
+     13164,
+     0
+    ],
+    [
+     22332,
+     0
+    ],
+    [
+     13375,
+     0
+    ],
+    [
+     23203,
+     0
+    ]
+   ],
+   "ench": {
+    "0": 2544,
+    "8": 2544,
+    "3": 7667,
+    "4": 1891,
+    "5": 7665,
+    "6": 2613,
+    "9": 1887,
+    "14": 2504,
+    "15": 7603
+   },
+   "desc": {
+    "head": "Blessed Plate Helm",
+    "neck": "Nacreous Shell Necklace",
+    "shoulder": "Justicar's Pauldrons",
+    "back": "Arcanoweave Cloak",
+    "chest": "Plate of the Shaman King",
+    "wrist": "Battleborn Armbraces",
+    "hands": "Heartflame Gauntlets",
+    "waist": "Vindicator's Belt",
+    "legs": "Handcrafted Mastersmith Leggings",
+    "feet": "Furbolg Berserker's Boots",
+    "finger1": "Rune Band of Wizardry",
+    "finger2": "Channeler's Ring",
+    "trinket1": "Adaptive Combat Assistant",
+    "trinket2": "Heart of the Scale",
+    "main_hand": "Blade of Necromancy",
+    "off_hand": "Crest of Retribution",
+    "ranged": "Libram of Fervor"
+   },
+   "eval": {
+    "Dps": 640.1286665427644,
+    "Tps": 1580.9181609297796,
+    "Dtps": 391.143828833549,
+    "Tmi": 85.32997082391432,
+    "Cod": 0.0009,
+    "DpsSd": 21.63646929451084,
+    "TpsSd": 54.408381417834924,
+    "DtpsSd": 33.41489064949875,
+    "TmiSd": 11.586432981186217
+   },
+   "final": [
+    307,
+    236,
+    286,
+    222,
+    345,
+    533,
+    0,
+    0,
+    0,
+    58,
+    0,
+    0,
+    0,
+    199,
+    1041,
+    40,
+    0,
+    50,
+    28,
+    0,
+    0,
+    31,
+    12,
+    6,
+    38,
+    0,
+    0,
+    7219.400000000001,
+    72.8,
+    4461,
+    4562,
+    81,
+    34,
+    27,
+    27,
+    27,
+    60,
+    0,
+    835
+   ],
+   "sets": [],
+   "objective": "tps",
+   "metric": "Tps",
+   "t05": false,
+   "rules": "prot_v3",
+   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "budget": "prototype",
+   "race": "RaceUndead",
+   "encounter": "boss",
+   "final_iters": 10000,
+   "source_tag": "v3_Tps_not05"
+  },
+  "dps_t05": {
+   "tag": "v3_Dps_t05",
+   "gear": [
+    [
+     226976,
+     0
+    ],
+    [
+     22403,
+     0
+    ],
+    [
+     226969,
+     0
+    ],
+    [
+     272411,
+     0
+    ],
+    [
+     226973,
+     0
+    ],
+    [
+     226970,
+     0
+    ],
+    [
+     226975,
+     0
+    ],
+    [
+     226971,
+     0
+    ],
+    [
+     13498,
+     0
+    ],
+    [
+     287033,
+     0
+    ],
+    [
+     22339,
+     0
+    ],
+    [
+     272406,
+     0
+    ],
+    [
+     272437,
+     0
+    ],
+    [
+     13164,
+     0
+    ],
+    [
+     22332,
+     0
+    ],
+    [
+     13375,
+     0
+    ],
+    [
+     23203,
+     0
+    ]
+   ],
+   "ench": {
+    "0": 2544,
+    "8": 2544,
+    "3": 7667,
+    "4": 1891,
+    "5": 7665,
+    "6": 7646,
+    "9": 1887,
+    "14": 1900,
+    "15": 7603
+   },
+   "desc": {
+    "head": "Soulforge Greathelm",
+    "neck": "Nacreous Shell Necklace",
+    "shoulder": "Soulforge Spaulders",
+    "back": "Arcanoweave Cloak",
+    "chest": "Soulforge Breastplate",
+    "wrist": "Soulforge Bracers",
+    "hands": "Soulforge Gauntlets",
+    "waist": "Soulforge Belt",
+    "legs": "Handcrafted Mastersmith Leggings",
+    "feet": "Furbolg Berserker's Boots",
+    "finger1": "Rune Band of Wizardry",
+    "finger2": "Channeler's Ring",
+    "trinket1": "Adaptive Combat Assistant",
+    "trinket2": "Heart of the Scale",
+    "main_hand": "Blade of Necromancy",
+    "off_hand": "Crest of Retribution",
+    "ranged": "Libram of Fervor"
+   },
+   "eval": {
+    "Dps": 669.1137513980923,
+    "Tps": 1604.673001217044,
+    "Dtps": 378.16963839400944,
+    "Tmi": 74.3479161264927,
+    "Cod": 0,
+    "DpsSd": 23.31054217814228,
+    "TpsSd": 56.0092178306565,
+    "DtpsSd": 32.23239288562346,
+    "TmiSd": 9.972676243083946
+   },
+   "final": [
+    325,
+    236,
+    322,
+    273,
+    331,
+    519,
+    0,
+    0,
+    0,
+    60,
+    0,
+    0,
+    0,
+    191,
+    1077,
+    40,
+    0,
+    50,
+    42,
+    0,
+    0,
+    41,
+    12,
+    6,
+    38,
+    0,
+    0,
+    7499.160000000001,
+    72.8,
+    4821,
+    5327,
+    91,
+    42,
+    35,
+    35,
+    35,
+    68,
+    0,
+    835
+   ],
+   "sets": [
+    "Soulforge Armor (2pc)",
+    "Soulforge Armor (3pc)",
+    "Soulforge Armor (4pc)",
+    "Soulforge Armor (6pc)"
+   ],
+   "objective": "dps",
+   "metric": "Dps",
+   "t05": true,
+   "rules": "prot_v3",
+   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "budget": "prototype",
+   "race": "RaceUndead",
+   "encounter": "boss",
+   "final_iters": 10000,
+   "source_tag": "v3_Dps_t05"
+  },
+  "dps_not05": {
+   "tag": "v3_Dps_not05",
+   "gear": [
+    [
+     250593,
+     0
+    ],
+    [
+     22403,
+     0
+    ],
+    [
+     284064,
+     0
+    ],
+    [
+     272411,
+     0
+    ],
+    [
+     13168,
+     0
+    ],
+    [
+     12936,
+     0
+    ],
+    [
+     280028,
+     0
+    ],
+    [
+     272404,
+     0
+    ],
+    [
+     13498,
+     0
+    ],
+    [
+     287033,
+     0
+    ],
+    [
+     22339,
+     0
+    ],
+    [
+     272406,
+     0
+    ],
+    [
+     272437,
+     0
+    ],
+    [
+     22321,
+     0
+    ],
+    [
+     22332,
+     0
+    ],
+    [
+     13375,
+     0
+    ],
+    [
+     23203,
+     0
+    ]
+   ],
+   "ench": {
+    "0": 2544,
+    "8": 2544,
+    "3": 7667,
+    "4": 1891,
+    "5": 7665,
+    "6": 7646,
+    "9": 1887,
+    "14": 1900,
+    "15": 7603
+   },
+   "desc": {
+    "head": "Blessed Plate Helm",
+    "neck": "Nacreous Shell Necklace",
+    "shoulder": "Cliffbreaker's Pauldrons",
+    "back": "Arcanoweave Cloak",
+    "chest": "Plate of the Shaman King",
+    "wrist": "Battleborn Armbraces",
+    "hands": "Heartflame Gauntlets",
+    "waist": "Vindicator's Belt",
+    "legs": "Handcrafted Mastersmith Leggings",
+    "feet": "Furbolg Berserker's Boots",
+    "finger1": "Rune Band of Wizardry",
+    "finger2": "Channeler's Ring",
+    "trinket1": "Adaptive Combat Assistant",
+    "trinket2": "Heart of Wyrmthalak",
+    "main_hand": "Blade of Necromancy",
+    "off_hand": "Crest of Retribution",
+    "ranged": "Libram of Fervor"
+   },
+   "eval": {
+    "Dps": 645.950101928201,
+    "Tps": 1554.7228612028289,
+    "Dtps": 389.21900338739005,
+    "Tmi": 84.48730294123862,
+    "Cod": 0.0004,
+    "DpsSd": 22.85697660886299,
+    "TpsSd": 54.7856987338271,
+    "DtpsSd": 33.111891078610405,
+    "TmiSd": 11.676910483389838
+   },
+   "final": [
+    312,
+    236,
+    288,
+    222,
+    312,
+    500,
+    0,
+    0,
+    0,
+    78,
+    0,
+    0,
+    0,
+    199,
+    1051,
+    40,
+    0,
+    50,
+    28,
+    0,
+    0,
+    31,
+    12,
+    6,
+    38,
+    0,
+    0,
+    7255.8,
+    72.8,
+    4481,
+    4562,
+    81,
+    34,
+    40,
+    27,
+    27,
+    60,
+    0,
+    835
+   ],
+   "sets": [],
+   "objective": "dps",
+   "metric": "Dps",
+   "t05": false,
+   "rules": "prot_v3",
+   "rules_sha256": "6f111c22896144318c26614d3e8f745d52a50669d63597932f66865e7485311b",
+   "budget": "prototype",
+   "race": "RaceUndead",
+   "encounter": "boss",
+   "final_iters": 10000,
+   "source_tag": "v3_Dps_not05"
+  }
+ }
+}

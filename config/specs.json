@@ -1,0 +1,42 @@
+{
+  "prot_paladin": {
+    "label": "Protection Paladin",
+    "class": 2,
+    "preset": "prot_paladin.json",
+    "preset_source": "ui/specs/paladin/protection/defaults.siml",
+    "pool": {
+      "phase": 1,
+      "max_req_level": 60,
+      "min_quality": 2,
+      "min_ilvl": 45,
+      "armor_types": [1, 2, 3, 4],
+      "main_hand": {"hand_types": [1, 2], "weapon_types": [1, 4, 9]},
+      "off_hand": {"weapon_types": [7]},
+      "ranged": {"ranged_weapon_types": [7]}
+    },
+    "enchant_options": {
+      "0": [1507, 1503, 1508, 2544, 1506],
+      "8": [1507, 1503, 1508, 2544, 1506],
+      "3": [1889, 7667, 2622],
+      "4": [1892, 1891, 7645],
+      "5": [1886, 8214, 7665, 1885],
+      "6": [2613, 7646, 2563, 2564],
+      "9": [929, 1887],
+      "14": [1900, 2504, 7940, 2563, 2564],
+      "15": [7663, 7603, 1886, 863, 7664]
+    },
+    "seed_sets": {"pvp6_warlord": 2085, "pvp6_champion": 2084},
+    "no_t05_seed_sets": {"lightforge": 188},
+    "t05_set": 1673,
+    "t05_variants": {
+      "tank": ["Soulforge Faceguard", "Soulforge Pauldrons", "Soulforge Chestguards",
+               "Soulforge Wristguards", "Soulforge Handguards", "Soulforge Waistguard",
+               "Soulforge Legguards", "Soulforge Sabatons"],
+      "dps": ["Soulforge Greathelm", "Soulforge Spaulders", "Soulforge Breastplate",
+              "Soulforge Bracers", "Soulforge Gauntlets", "Soulforge Belt",
+              "Soulforge Legplates", "Soulforge Warboots"]
+    },
+    "climb_set_ids": [1673, 2084, 2085, 188],
+    "screen_slots": [12, 14, 15, 16]
+  }
+}

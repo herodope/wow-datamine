@@ -1,0 +1,20 @@
+siml 1
+// v3_protpally_DPS_noT05 | v3 rules (v2 + no warrior/shaman/warlock ST class-quest items, no Darkspear epics, no Band of the Better Half) | TPS 1555, DPS 646, DTPS 389, TMI 84.5, HP 4481
+
+head       blessed_plate_helm + arcanum_of_focus
+neck       nacreous_shell_necklace
+shoulder   cliffbreakers_pauldrons
+back       arcanoweave_cloak + cloak_agility
+chest      plate_of_the_shaman_king + chest_greater_stats
+wrist      battleborn_armbraces + bracer_greater_spellpower
+hands      heartflame_gauntlets + gloves_holy_power
+waist      vindicators_belt
+legs       handcrafted_mastersmith_leggings + arcanum_of_focus
+feet       furbolg_berserkers_boots + boots_greater_agility
+finger1    rune_band_of_wizardry
+finger2    channelers_ring
+trinket1   adaptive_combat_assistant
+trinket2   heart_of_wyrmthalak
+main_hand  blade_of_necromancy + weapon_crusader
+off_hand   crest_of_retribution + shield_law_of_nature
+ranged     libram_of_fervor

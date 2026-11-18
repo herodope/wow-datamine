@@ -1,0 +1,1024 @@
+{
+ "DTPS": {
+  "metric": "Dtps",
+  "base": 199.09990060666206,
+  "slots": {
+   "1": {
+    "cur": "Talisman of Evasion",
+    "alts": [
+     [
+      "Evil Eye Pendant",
+      2.9
+     ],
+     [
+      "Amulet of the Darkmoon",
+      7.2
+     ],
+     [
+      "Verek's Collar",
+      5.5
+     ],
+     [
+      "Scout's Medallion",
+      8.4
+     ],
+     [
+      "Skibi's Pendant",
+      9.0
+     ]
+    ]
+   },
+   "3": {
+    "cur": "Cloak of Warding",
+    "alts": [
+     [
+      "Shadow Prowler's Cloak",
+      1.6
+     ],
+     [
+      "Cape of the Black Baron",
+      2.0
+     ],
+     [
+      "Blisterbane Wrap",
+      2.0
+     ],
+     [
+      "Dark Phantom Cape",
+      2.1
+     ],
+     [
+      "Blackveil Cape",
+      2.4
+     ]
+    ]
+   },
+   "10": {
+    "cur": "Ring of Awareness",
+    "alts": [
+     [
+      "Innervating Band",
+      2.7
+     ],
+     [
+      "Cutthroat's Signet",
+      2.6
+     ],
+     [
+      "Eagle's Head Signet",
+      2.1
+     ],
+     [
+      "Masons Fraternity Ring",
+      3.1
+     ]
+    ]
+   },
+   "11": {
+    "cur": "Band of the Steadfast Hero",
+    "alts": [
+     [
+      "Innervating Band",
+      1.1
+     ],
+     [
+      "Cutthroat's Signet",
+      1.2
+     ],
+     [
+      "Eagle's Head Signet",
+      0.2
+     ],
+     [
+      "Masons Fraternity Ring",
+      1.4
+     ]
+    ]
+   },
+   "12": {
+    "cur": "Defender's Grip Stabilizer",
+    "alts": [
+     [
+      "Fingerbreaker Stamp",
+      6.6
+     ],
+     [
+      "Mark of Tyranny",
+      0.1
+     ],
+     [
+      "Smotts' Compass",
+      5.8
+     ],
+     [
+      "Frostwolf Insignia Rank 3",
+      5.8
+     ],
+     [
+      "Frostwolf Insignia Rank 4",
+      5.8
+     ]
+    ]
+   },
+   "13": {
+    "cur": "Arena Grand Master",
+    "alts": [
+     [
+      "Fingerbreaker Stamp",
+      2.1
+     ],
+     [
+      "Mark of Tyranny",
+      0.7
+     ],
+     [
+      "Smotts' Compass",
+      0.7
+     ],
+     [
+      "Frostwolf Insignia Rank 3",
+      0.7
+     ],
+     [
+      "Frostwolf Insignia Rank 4",
+      0.7
+     ]
+    ]
+   },
+   "14": {
+    "cur": "The Hand of Antu'sul",
+    "alts": [
+     [
+      "Frostguard",
+      2.7
+     ],
+     [
+      "Jang'thraze the Protector",
+      3.6
+     ],
+     [
+      "Rubidium Hammer",
+      6.6
+     ],
+     [
+      "Scaleguard Scimitar",
+      7.0
+     ],
+     [
+      "Well Balanced Axe",
+      5.4
+     ],
+     [
+      "Mind Carver",
+      7.6
+     ]
+    ]
+   },
+   "15": {
+    "cur": "Barrier Shield",
+    "alts": [
+     [
+      "Draconian Deflector",
+      0.8
+     ],
+     [
+      "Intricately Runed Shield",
+      3.7
+     ],
+     [
+      "Petrified Bark Shield",
+      4.3
+     ],
+     [
+      "Darrowshire Strongguard",
+      4.8
+     ],
+     [
+      "Raptorscale Bulwark",
+      5.0
+     ],
+     [
+      "Bloodfur Bulwark",
+      3.6
+     ]
+    ]
+   }
+  }
+ },
+ "TPS T0.5": {
+  "metric": "Tps",
+  "base": 1619.3287205638096,
+  "slots": {
+   "1": {
+    "cur": "Nacreous Shell Necklace",
+    "alts": [
+     [
+      "Star of Mystaria",
+      -6.9
+     ],
+     [
+      "Sentimental Locket",
+      -5.8
+     ],
+     [
+      "Horn of Ve'han",
+      -7.4
+     ],
+     [
+      "Beads of Ogre Might",
+      -4.6
+     ],
+     [
+      "Pendant of Celerity",
+      -4.4
+     ]
+    ]
+   },
+   "3": {
+    "cur": "Arcanoweave Cloak",
+    "alts": [
+     [
+      "Howler's Furs",
+      -10.2
+     ],
+     [
+      "Regal Direhorn Drape",
+      -7.0
+     ],
+     [
+      "Amplifying Cloak",
+      -7.4
+     ],
+     [
+      "Windserpent Scaled Cloak",
+      -14.5
+     ],
+     [
+      "Shroud of Domination",
+      -14.4
+     ]
+    ]
+   },
+   "10": {
+    "cur": "Rune Band of Wizardry",
+    "alts": [
+     [
+      "Cutthroat's Signet",
+      -7.3
+     ],
+     [
+      "Blackstone Ring",
+      -8.9
+     ],
+     [
+      "Tarnished Elven Ring",
+      -8.1
+     ],
+     [
+      "Venomvessel Ring",
+      -11.2
+     ]
+    ]
+   },
+   "11": {
+    "cur": "Channeler's Ring",
+    "alts": [
+     [
+      "Cutthroat's Signet",
+      -3.5
+     ],
+     [
+      "Blackstone Ring",
+      -5.0
+     ],
+     [
+      "Tarnished Elven Ring",
+      -4.2
+     ],
+     [
+      "Venomvessel Ring",
+      -7.4
+     ]
+    ]
+   },
+   "12": {
+    "cur": "Adaptive Combat Assistant",
+    "alts": [
+     [
+      "Smolderweb's Eye",
+      -16.8
+     ],
+     [
+      "Weakness Analyzer",
+      -6.0
+     ],
+     [
+      "Frozen Heart of the Mountain",
+      -17.4
+     ],
+     [
+      "Rune of the Guard Captain",
+      -15.9
+     ],
+     [
+      "Cleansed Vilebranch Medallion",
+      -15.9
+     ]
+    ]
+   },
+   "13": {
+    "cur": "Heart of the Scale",
+    "alts": [
+     [
+      "Smolderweb's Eye",
+      -1.7
+     ],
+     [
+      "Frozen Heart of the Mountain",
+      -2.7
+     ],
+     [
+      "Rune of the Guard Captain",
+      -3.3
+     ],
+     [
+      "Cleansed Vilebranch Medallion",
+      -3.3
+     ]
+    ]
+   },
+   "14": {
+    "cur": "Blade of Necromancy",
+    "alts": [
+     [
+      "Hanzo Sword",
+      -41.7
+     ],
+     [
+      "The Jaw Breaker",
+      -45.5
+     ],
+     [
+      "Masterwork Stormhammer",
+      -50.9
+     ],
+     [
+      "Grave Scepter",
+      -51.0
+     ],
+     [
+      "Swiftstrike Cudgel",
+      -63.6
+     ],
+     [
+      "Mind Carver",
+      -66.1
+     ]
+    ]
+   },
+   "15": {
+    "cur": "Crest of Retribution",
+    "alts": [
+     [
+      "Observer's Shield",
+      -10.9
+     ],
+     [
+      "Draconian Aegis of the Legion",
+      -2.1
+     ],
+     [
+      "Thrash's Trash",
+      -5.6
+     ],
+     [
+      "Wall of Water",
+      -5.8
+     ],
+     [
+      "Plague Defiled Buckler",
+      -6.6
+     ],
+     [
+      "Rhombeard Protector",
+      -7.8
+     ]
+    ]
+   }
+  }
+ },
+ "TPS noT0.5": {
+  "metric": "Tps",
+  "base": 1581.4338420910794,
+  "slots": {
+   "1": {
+    "cur": "Nacreous Shell Necklace",
+    "alts": [
+     [
+      "Star of Mystaria",
+      -6.3
+     ],
+     [
+      "Sentimental Locket",
+      -6.0
+     ],
+     [
+      "Horn of Ve'han",
+      -8.6
+     ],
+     [
+      "Beads of Ogre Might",
+      -4.5
+     ],
+     [
+      "Pendant of Celerity",
+      -6.3
+     ]
+    ]
+   },
+   "3": {
+    "cur": "Arcanoweave Cloak",
+    "alts": [
+     [
+      "Howler's Furs",
+      -9.9
+     ],
+     [
+      "Regal Direhorn Drape",
+      -20.6
+     ],
+     [
+      "Amplifying Cloak",
+      -20.9
+     ],
+     [
+      "Windserpent Scaled Cloak",
+      -22.9
+     ],
+     [
+      "Shroud of Domination",
+      -28.1
+     ]
+    ]
+   },
+   "10": {
+    "cur": "Rune Band of Wizardry",
+    "alts": [
+     [
+      "Cutthroat's Signet",
+      -8.2
+     ],
+     [
+      "Blackstone Ring",
+      -8.8
+     ],
+     [
+      "Tarnished Elven Ring",
+      -9.9
+     ],
+     [
+      "Venomvessel Ring",
+      -11.1
+     ]
+    ]
+   },
+   "11": {
+    "cur": "Channeler's Ring",
+    "alts": [
+     [
+      "Cutthroat's Signet",
+      -4.2
+     ],
+     [
+      "Blackstone Ring",
+      -5.0
+     ],
+     [
+      "Tarnished Elven Ring",
+      -6.0
+     ],
+     [
+      "Venomvessel Ring",
+      -7.2
+     ]
+    ]
+   },
+   "12": {
+    "cur": "Adaptive Combat Assistant",
+    "alts": [
+     [
+      "Smolderweb's Eye",
+      -16.4
+     ],
+     [
+      "Weakness Analyzer",
+      -6.7
+     ],
+     [
+      "Frozen Heart of the Mountain",
+      -16.6
+     ],
+     [
+      "Rune of the Guard Captain",
+      -15.9
+     ],
+     [
+      "Cleansed Vilebranch Medallion",
+      -15.9
+     ]
+    ]
+   },
+   "13": {
+    "cur": "Heart of the Scale",
+    "alts": [
+     [
+      "Smolderweb's Eye",
+      -5.1
+     ],
+     [
+      "Frozen Heart of the Mountain",
+      -6.2
+     ],
+     [
+      "Rune of the Guard Captain",
+      -5.7
+     ],
+     [
+      "Cleansed Vilebranch Medallion",
+      -5.7
+     ]
+    ]
+   },
+   "14": {
+    "cur": "Blade of Necromancy",
+    "alts": [
+     [
+      "Hanzo Sword",
+      -42.3
+     ],
+     [
+      "The Jaw Breaker",
+      -46.3
+     ],
+     [
+      "Masterwork Stormhammer",
+      -51.0
+     ],
+     [
+      "Grave Scepter",
+      -51.6
+     ],
+     [
+      "Swiftstrike Cudgel",
+      -65.3
+     ],
+     [
+      "Mind Carver",
+      -65.8
+     ]
+    ]
+   },
+   "15": {
+    "cur": "Crest of Retribution",
+    "alts": [
+     [
+      "Observer's Shield",
+      -13.2
+     ],
+     [
+      "Draconian Aegis of the Legion",
+      -3.4
+     ],
+     [
+      "Thrash's Trash",
+      -7.0
+     ],
+     [
+      "Wall of Water",
+      -7.2
+     ],
+     [
+      "Plague Defiled Buckler",
+      -7.9
+     ],
+     [
+      "Rhombeard Protector",
+      -9.1
+     ]
+    ]
+   }
+  }
+ },
+ "DPS T0.5": {
+  "metric": "Dps",
+  "base": 669.2905216812704,
+  "slots": {
+   "1": {
+    "cur": "Nacreous Shell Necklace",
+    "alts": [
+     [
+      "Sentimental Locket",
+      -1.8
+     ],
+     [
+      "Star of Mystaria",
+      -2.8
+     ],
+     [
+      "Beads of Ogre Might",
+      -0.8
+     ],
+     [
+      "Horn of Ve'han",
+      -3.2
+     ],
+     [
+      "Pendant of Celerity",
+      -1.7
+     ]
+    ]
+   },
+   "3": {
+    "cur": "Arcanoweave Cloak",
+    "alts": [
+     [
+      "Howler's Furs",
+      -2.6
+     ],
+     [
+      "Shroud of Domination",
+      -10.5
+     ],
+     [
+      "Frightmaw Hide",
+      -11.3
+     ],
+     [
+      "Pale Moon Cloak",
+      -9.3
+     ],
+     [
+      "Ogre Casting Cloak",
+      -10.7
+     ]
+    ]
+   },
+   "10": {
+    "cur": "Rune Band of Wizardry",
+    "alts": [
+     [
+      "Signet of the Soulless Rider",
+      -6.0
+     ],
+     [
+      "Cutthroat's Signet",
+      -1.9
+     ],
+     [
+      "Blackstone Ring",
+      -2.6
+     ],
+     [
+      "Tarnished Elven Ring",
+      -3.1
+     ]
+    ]
+   },
+   "11": {
+    "cur": "Channeler's Ring",
+    "alts": [
+     [
+      "Signet of the Soulless Rider",
+      -4.5
+     ],
+     [
+      "Cutthroat's Signet",
+      -0.4
+     ],
+     [
+      "Blackstone Ring",
+      -1.1
+     ],
+     [
+      "Tarnished Elven Ring",
+      -1.6
+     ]
+    ]
+   },
+   "12": {
+    "cur": "Adaptive Combat Assistant",
+    "alts": [
+     [
+      "Heart of Wyrmthalak",
+      -3.7
+     ],
+     [
+      "Darkmoon Card: Maelstrom",
+      -4.7
+     ],
+     [
+      "Highborne Research Tablet",
+      -5.2
+     ],
+     [
+      "Smolderweb's Eye",
+      -8.6
+     ],
+     [
+      "Bolt's Charged Eyeball",
+      -5.0
+     ]
+    ]
+   },
+   "13": {
+    "cur": "Heart of the Scale",
+    "alts": [
+     [
+      "Heart of Wyrmthalak",
+      0.2
+     ],
+     [
+      "Darkmoon Card: Maelstrom",
+      -0.3
+     ],
+     [
+      "Highborne Research Tablet",
+      -1.7
+     ],
+     [
+      "Smolderweb's Eye",
+      -5.3
+     ],
+     [
+      "Bolt's Charged Eyeball",
+      -1.7
+     ]
+    ]
+   },
+   "14": {
+    "cur": "Blade of Necromancy",
+    "alts": [
+     [
+      "Iceblade Hacker",
+      -2.6
+     ],
+     [
+      "Dragon's Call",
+      -12.6
+     ],
+     [
+      "Masterwork Stormhammer",
+      -9.0
+     ],
+     [
+      "The Jaw Breaker",
+      -8.6
+     ],
+     [
+      "Hanzo Sword",
+      -9.1
+     ],
+     [
+      "Lightcrest Hammer",
+      -11.1
+     ]
+    ]
+   },
+   "15": {
+    "cur": "Crest of Retribution",
+    "alts": [
+     [
+      "Observer's Shield",
+      -8.7
+     ],
+     [
+      "Draconian Aegis of the Legion",
+      -5.5
+     ],
+     [
+      "Thrash's Trash",
+      -6.9
+     ],
+     [
+      "Wall of Water",
+      -7.1
+     ],
+     [
+      "Dreadguard's Protector",
+      -7.5
+     ],
+     [
+      "Plague Defiled Buckler",
+      -7.2
+     ]
+    ]
+   }
+  }
+ },
+ "DPS noT0.5": {
+  "metric": "Dps",
+  "base": 646.082792782673,
+  "slots": {
+   "1": {
+    "cur": "Nacreous Shell Necklace",
+    "alts": [
+     [
+      "Sentimental Locket",
+      -1.8
+     ],
+     [
+      "Star of Mystaria",
+      -2.0
+     ],
+     [
+      "Beads of Ogre Might",
+      -1.0
+     ],
+     [
+      "Horn of Ve'han",
+      -2.4
+     ],
+     [
+      "Pendant of Celerity",
+      -1.3
+     ]
+    ]
+   },
+   "3": {
+    "cur": "Arcanoweave Cloak",
+    "alts": [
+     [
+      "Howler's Furs",
+      -2.7
+     ],
+     [
+      "Shroud of Domination",
+      -9.8
+     ],
+     [
+      "Frightmaw Hide",
+      -10.4
+     ],
+     [
+      "Pale Moon Cloak",
+      -8.7
+     ],
+     [
+      "Ogre Casting Cloak",
+      -9.9
+     ]
+    ]
+   },
+   "10": {
+    "cur": "Rune Band of Wizardry",
+    "alts": [
+     [
+      "Signet of the Soulless Rider",
+      -5.0
+     ],
+     [
+      "Cutthroat's Signet",
+      -1.6
+     ],
+     [
+      "Blackstone Ring",
+      -2.6
+     ],
+     [
+      "Tarnished Elven Ring",
+      -2.5
+     ]
+    ]
+   },
+   "11": {
+    "cur": "Channeler's Ring",
+    "alts": [
+     [
+      "Signet of the Soulless Rider",
+      -3.7
+     ],
+     [
+      "Cutthroat's Signet",
+      -0.2
+     ],
+     [
+      "Blackstone Ring",
+      -1.2
+     ],
+     [
+      "Tarnished Elven Ring",
+      -1.2
+     ]
+    ]
+   },
+   "12": {
+    "cur": "Adaptive Combat Assistant",
+    "alts": [
+     [
+      "Heart of the Scale",
+      -3.1
+     ],
+     [
+      "Darkmoon Card: Maelstrom",
+      -4.1
+     ],
+     [
+      "Highborne Research Tablet",
+      -5.3
+     ],
+     [
+      "Smolderweb's Eye",
+      -7.4
+     ],
+     [
+      "Bolt's Charged Eyeball",
+      -5.1
+     ]
+    ]
+   },
+   "13": {
+    "cur": "Heart of Wyrmthalak",
+    "alts": [
+     [
+      "Heart of the Scale",
+      0.4
+     ],
+     [
+      "Darkmoon Card: Maelstrom",
+      -0.7
+     ],
+     [
+      "Highborne Research Tablet",
+      -1.3
+     ],
+     [
+      "Smolderweb's Eye",
+      -4.2
+     ],
+     [
+      "Bolt's Charged Eyeball",
+      -1.5
+     ]
+    ]
+   },
+   "14": {
+    "cur": "Blade of Necromancy",
+    "alts": [
+     [
+      "Iceblade Hacker",
+      -2.4
+     ],
+     [
+      "Dragon's Call",
+      -10.2
+     ],
+     [
+      "Masterwork Stormhammer",
+      -8.3
+     ],
+     [
+      "The Jaw Breaker",
+      -8.1
+     ],
+     [
+      "Hanzo Sword",
+      -9.1
+     ],
+     [
+      "Lightcrest Hammer",
+      -10.2
+     ]
+    ]
+   },
+   "15": {
+    "cur": "Crest of Retribution",
+    "alts": [
+     [
+      "Observer's Shield",
+      -8.5
+     ],
+     [
+      "Draconian Aegis of the Legion",
+      -4.9
+     ],
+     [
+      "Thrash's Trash",
+      -6.3
+     ],
+     [
+      "Wall of Water",
+      -6.4
+     ],
+     [
+      "Dreadguard's Protector",
+      -6.9
+     ],
+     [
+      "Plague Defiled Buckler",
+      -6.5
+     ]
+    ]
+   }
+  }
+ }
+}

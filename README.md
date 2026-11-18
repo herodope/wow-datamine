@@ -412,6 +412,27 @@ a confident wrong answer.
 
 ---
 
+## Gear sims (wowsim)
+
+A second MCP server, `wowsim`, runs [wowsims/forever](https://github.com/wowsims/forever)
+locally: sim a gear set, stat weights, item comparisons and full BiS
+optimization, with saved findings that flag themselves stale when the sim,
+its item database or the rules change. It is separate from `wow-datamine` and
+reads the sim's own item database, not `wow.db`.
+
+```powershell
+python scripts/build_sim.py --setup-toolchains     # Go + protoc into vendor/toolchains/, build bin/
+python scripts/wowsim.py sim --gear 2026-11-18_prot_bis/tps_t05
+python scripts/wowsim.py compare --gear 2026-11-18_prot_bis/dps_t05 --slot trinket2 --top-n 5 --metric dps
+python scripts/wowsim.py optimize --objective tps --t05 on --budget quick --wait
+```
+
+Setup, the tools, the optimizer and the rules profiles are in
+[`docs/wowsim.md`](docs/wowsim.md); the agent workflow is in
+[`.claude/skills/wowsim-gear/SKILL.md`](.claude/skills/wowsim-gear/SKILL.md).
+
+---
+
 ## WTL API gotchas
 
 Scripts drive WTL over HTTP. [`docs/wtl-api.md`](docs/wtl-api.md) is the full
@@ -595,13 +616,18 @@ builds.json    manifest index, keyed by buildId (<product>:<buildId> for a
                second product) — the unrecoverable bit
 scripts/       the pipeline
 docs/          WTL API reference, conventions, patch-day checklist, data reference
-.claude/skills/wow-query/   the query-conventions skill for Claude Code
+bisrun/        Go batch harness for the sim
+config/        sim specs, base requests, rules profiles
+findings/      saved sim results
+.claude/skills/wow-query/     the query-conventions skill for Claude Code
+.claude/skills/wowsim-gear/   the gear-sim skill for Claude Code
 CLAUDE.md      project context and locked decisions (agent-facing)
 README.md      this file
 ```
 
-`out/` (extracted client data), `reports/` (generated diff output) and `vendor/`
-(third-party clones) are gitignored. All are reproducible; `builds.json` is not — once
+`out/` (extracted client data), `reports/` (generated diff output), `bin/` and
+`sim_out/` (sim build output and state) and `vendor/` (third-party clones and
+toolchains) are gitignored. All are reproducible; `builds.json` is not — once
 Blizzard rotates a build off the version list, its config hashes are gone.
 
 ### Scripts
@@ -631,6 +657,11 @@ Blizzard rotates a build off the version list, its config hashes are gone.
 | `check_findings.py` | Re-test the dated predictions in a local findings record (`config.FINDINGS_DOC`, not tracked) against a build |
 | `spell_gap.py` | Spell power Forever needs to match Classic Era damage, per spell; needs both builds extracted |
 | `test_*.py` | Stdlib unittest suites for `sod_tags`, `spell_reach` and `player_notes`; skipped when no `wow.db` exists |
+| `build_sim.py` | Toolchains, wowsims checkout, protos, `bin/bisrun` and `bin/wowsimcli` |
+| `wowsim.py` | Gear sims from the shell: sim, weights, compare, optimize, findings |
+| `wowsim_mcp_server.py` | The same over MCP stdio (needs `requirements.txt`) |
+| `wowsim_job.py` | Background optimize runner, spawned detached by the server |
+| `test_wowsim_tools.py`, `wowsim_accept.py` | Sim unit tests; acceptance tests against the prototype findings |
 
 Every script is idempotent and safe to re-run. `fetch_builds.py` only ever adds
 entries to `builds.json`, never overwrites one; `sync_refs.py` skips the 150 MB
@@ -657,3 +688,4 @@ Entertainment; this project is unaffiliated with and unendorsed by Blizzard.
 - [WoWDBDefs](https://github.com/wowdev/WoWDBDefs) — DB2 structure definitions
 - [wow-listfile](https://github.com/wowdev/wow-listfile) — community filename listfile
 - [TACTKeys](https://github.com/wowdev/TACTKeys) — known encryption keys
+- [wowsims/forever](https://github.com/wowsims/forever) — the gear sim

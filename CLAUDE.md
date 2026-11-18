@@ -127,12 +127,16 @@ and CDN-only builds that WTL will not load.
 | Python | 3.10+ — `mcp` requires it; the scripts themselves are 3.9-compatible |
 | .NET | whatever `vendor/wow.tools.local` needs to build (`dotnet run -c Release`) |
 | Python packages | `pip install -r requirements.txt` |
+| Go, protoc | sim tools only: `python scripts/build_sim.py --setup-toolchains` puts pinned versions in `vendor/toolchains/` |
 
 **`requirements.txt` has exactly one entry.** The pipeline is deliberately
 stdlib-only — extraction, diffing, enrichment, `build_db.py`, the HTML
 renderer and `query.py` use nothing but `urllib`, `sqlite3`, `csv`, `json`,
 `hashlib` and `concurrent.futures`. `mcp` is the single third-party import in
-the repo, and it is needed only by `scripts/mcp_server.py`.
+the repo, and it is needed only by the two MCP servers,
+`scripts/mcp_server.py` and `scripts/wowsim_mcp_server.py`. The sim tools in
+`scripts/wowsim_tools/` are stdlib-only too, which is why rule profiles are
+JSON, not YAML.
 
 Keep it that way. It means the pipeline runs on a bare Python with no install
 step, and a broken dependency can only ever take out the MCP server — never an
@@ -194,9 +198,13 @@ Tracked, not loaded every session. Read the one that matches the task.
 | [`docs/retail-contamination.md`](docs/retail-contamination.md) | changing `contamination.py` or judging a contamination finding |
 | [`docs/sod-tags.md`](docs/sod-tags.md) | touching `sod_tags.py` or `spell_reach.py`, or calling a spell SoD, cut or player-facing |
 | [`docs/repo-layout.md`](docs/repo-layout.md) | `wow.db` schema and prefixes, MCP server setup, `manifest.json` resolution values |
+| [`docs/wowsim.md`](docs/wowsim.md) | building or changing the sim tools: `bisrun`, the `wowsim` MCP server, the optimizer, rules profiles, findings |
 
 Ad-hoc data questions go through the `wow-query` skill
-(`.claude/skills/wow-query/SKILL.md`) and `scripts/query.py`.
+(`.claude/skills/wow-query/SKILL.md`) and `scripts/query.py`. Gear, BiS and
+stat-weight questions go through the `wowsim-gear` skill
+(`.claude/skills/wowsim-gear/SKILL.md`) and the `wowsim` MCP server, a sibling
+of `wow-datamine` that runs wowsims/forever locally.
 
 ---
 
@@ -208,11 +216,18 @@ sod_allowlist.json, sod_manual.json   hand-kept SoD tag inputs
 requirements.txt                one entry: mcp
 docs/                           reference docs (table above)
 scripts/                        the pipeline; config.py is the single source
+scripts/wowsim_tools/           sim package behind the wowsim MCP server and wowsim.py
+bisrun/                         Go batch harness over wowsims/forever (own module)
+config/                         sim specs, base requests, rules profiles
+findings/                       saved sim results (previous data, staleness-checked)
 .claude/skills/wow-query/       query rules skill (force-added)
+.claude/skills/wowsim-gear/     sim workflow skill (force-added)
 out/<version>.<build>/          GITIGNORED: db2/, db2_hotfixed/, hotfixes.csv,
                                 files.csv, gametables/, wow.db, manifest.json
 reports/                        GITIGNORED: generated diffs and patch notes
-vendor/                         GITIGNORED: WTL, TACTSharp, WoWDBDefs, listfile, TACTKeys
+bin/, sim_out/                  GITIGNORED: sim binaries; pool cache and jobs
+vendor/                         GITIGNORED: WTL, TACTSharp, WoWDBDefs, listfile, TACTKeys,
+                                wowsims/forever, toolchains/
 ```
 
 `wow.db` table prefixes: none is the live view (shipped plus hotfixes),

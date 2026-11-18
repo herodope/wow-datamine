@@ -53,6 +53,12 @@ server and the `manifest.json` resolution values.
 │       ├── gametables/*.txt    # tab-separated, NOT DB2s — see key-facts.md
 │       ├── wow.db              # SQLite over all of the above, rebuildable
 │       └── manifest.json       # row counts, layouthashes, metrics
+├── bisrun/                  # Go batch harness over wowsims/forever — docs/wowsim.md
+├── config/                  # sim specs, base requests, rules profiles
+├── findings/                # saved sim results, staleness-checked
+├── scripts/wowsim_tools/    # sim package; wowsim_mcp_server.py, wowsim.py beside it
+├── bin/                     # GITIGNORED — bisrun, wowsimcli, build_info.json
+├── sim_out/                 # GITIGNORED — sim pool cache, background jobs
 ├── reports/                 # GITIGNORED — generated diff output
 │   ├── <from>_to_<to>.md
 │   ├── hotfix_<build>.md
@@ -145,7 +151,9 @@ and that a missing table usually means "not in this build".
 ## MCP server
 
 `scripts/mcp_server.py` exposes the same database over MCP stdio, for clients
-that cannot run `query.py` themselves.
+that cannot run `query.py` themselves. The second server in the repo,
+`scripts/wowsim_mcp_server.py` (gear sims), is documented in
+[wowsim.md](wowsim.md).
 
 Four tools: `list_tables`, `describe_table`, `query`, `get_conventions`.
 Install with `pip install -r requirements.txt` — see **Prerequisites** in

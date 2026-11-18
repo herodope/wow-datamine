@@ -17,6 +17,11 @@ __pycache__/
 # base64 icon art that churns on every regeneration.
 reports/
 
+# Sim build output and sim state (pool cache, background jobs). Rebuilt by
+# scripts/build_sim.py; jobs are scratch.
+bin/
+sim_out/
+
 # Quest XP sweep. A separate local project, not part of the datamine.
 questxp/
 
