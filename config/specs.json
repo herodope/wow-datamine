@@ -4,6 +4,8 @@
     "class": 2,
     "preset": "prot_paladin.json",
     "preset_source": "ui/specs/paladin/protection/defaults.siml",
+    "default_rules": "prot_v3",
+    "default_metric": "tps",
     "pool": {
       "phase": 1,
       "max_req_level": 60,
@@ -38,5 +40,46 @@
     },
     "climb_set_ids": [1673, 2084, 2085, 188],
     "screen_slots": [12, 14, 15, 16]
+  },
+  "ret_paladin": {
+    "label": "Retribution Paladin",
+    "class": 2,
+    "preset": "ret_paladin.json",
+    "preset_source": "config/presets/ret_paladin.siml",
+    "default_rules": "ret_v1",
+    "default_metric": "dps",
+    "pool": {
+      "phase": 1,
+      "max_req_level": 60,
+      "min_quality": 2,
+      "min_ilvl": 45,
+      "armor_types": [1, 2, 3, 4],
+      "main_hand": {"hand_types": [4], "weapon_types": [1, 4, 9]},
+      "ranged": {"ranged_weapon_types": [7]}
+    },
+    "enchant_options": {
+      "0": [2543, 1506, 1508, 2544],
+      "8": [2543, 1506, 1508, 2544],
+      "1": [904, 856, 8218],
+      "3": [849, 7667],
+      "4": [1891, 7223, 7645],
+      "5": [2566, 1885, 7656, 7665],
+      "6": [8206, 2564, 2563, 8207, 7646],
+      "9": [1887],
+      "14": [1900, 7940, 7943, 1896, 2646, 8215, 7662, 8211]
+    },
+    "seed_sets": {"pvp6_warlord": 2085, "pvp6_champion": 2084},
+    "no_t05_seed_sets": {"lightforge": 188},
+    "t05_set": 1673,
+    "t05_variants": {
+      "tank": ["Soulforge Faceguard", "Soulforge Pauldrons", "Soulforge Chestguards",
+               "Soulforge Wristguards", "Soulforge Handguards", "Soulforge Waistguard",
+               "Soulforge Legguards", "Soulforge Sabatons"],
+      "dps": ["Soulforge Greathelm", "Soulforge Spaulders", "Soulforge Breastplate",
+              "Soulforge Bracers", "Soulforge Gauntlets", "Soulforge Belt",
+              "Soulforge Legplates", "Soulforge Warboots"]
+    },
+    "climb_set_ids": [1673, 2084, 2085, 188],
+    "screen_slots": [12, 14, 16]
   }
 }

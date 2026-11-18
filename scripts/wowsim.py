@@ -8,6 +8,7 @@
     python scripts/wowsim.py compare --gear <set> --slot neck --top-n 5 --metric tps
     python scripts/wowsim.py close-calls --gear <set> --metric tps
     python scripts/wowsim.py optimize --objective tps --t05 on [--budget quick] [--wait]
+    python scripts/wowsim.py optimize --spec ret_paladin --objective dps --t05 off --wait
     python scripts/wowsim.py job [<job id>]           # status; no id lists recent jobs
     python scripts/wowsim.py result <job id>
     python scripts/wowsim.py export <job id | finding/set>
@@ -39,8 +40,9 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter,
                                  epilog=__doc__.split("\n\n", 1)[1])
     shared = argparse.ArgumentParser(add_help=False)
-    shared.add_argument("--spec", help="spec key in config/specs.json (default prot_paladin)")
-    shared.add_argument("--rules", help="rules profile in config/rules/ (default: last used)")
+    shared.add_argument("--spec", help="spec key in config/specs.json: prot_paladin (default), ret_paladin")
+    shared.add_argument("--rules", help="rules profile in config/rules/ (default: the last one used "
+                                        "for this spec, else the spec's default_rules)")
     shared.add_argument("--race", help="proto race, e.g. RaceUndead (default: the profile's)")
     subs = ap.add_subparsers(dest="cmd", required=True)
 
@@ -71,13 +73,13 @@ def main():
     p.add_argument("--slot", required=True)
     p.add_argument("--items")
     p.add_argument("--top-n", type=int)
-    p.add_argument("--metric", default="tps")
+    p.add_argument("--metric", help="default: the spec's default_metric (tps prot, dps ret)")
     p.add_argument("--iterations", type=int, default=4000)
     p.add_argument("--t05", default="on")
 
     p = sub.add_parser("close-calls")
     p.add_argument("--gear", required=True)
-    p.add_argument("--metric", default="tps")
+    p.add_argument("--metric", help="default: the spec's default_metric (tps prot, dps ret)")
     p.add_argument("--t05", default="on")
     p.add_argument("--iterations", type=int, default=4000)
 

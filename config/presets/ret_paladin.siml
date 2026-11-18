@@ -1,0 +1,13 @@
+siml 1
+spec retribution_paladin
+// Source of ret_paladin.json: the spec's defaults with its default APL as the
+// rotation. defaults.siml holds a simple: rotation, which the site expands in
+// TypeScript (spec.ts simpleRotation) and the sim does not run. For the
+// default build (Unsealed Wrath, Retribution Aura, Crusader assigned) that
+// expansion is apls/default.apl.siml with its variables unchanged.
+//   bisrun preset config/presets/ret_paladin.siml > config/presets/ret_paladin.json
+use "../../vendor/forever/ui/specs/paladin/retribution/defaults.siml"
+use "../../vendor/forever/ui/specs/paladin/retribution/apls/default.apl.siml"
+
+apl:
+  type apl

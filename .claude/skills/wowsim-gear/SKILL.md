@@ -30,6 +30,18 @@ Reference: `docs/wowsim.md`.
 Gear arguments take `.gear.siml` text, a findings set id
 (`2026-11-18_prot_bis/tps_t05`), an optimize job id, or `preset`.
 
+## Specs
+
+- `prot_paladin` (default): rules `prot_v3`, metric `tps`.
+- `ret_paladin`: rules `ret_v1`, metric `dps`, the Unsealed Wrath build with
+  the default ret APL. Pass `spec="ret_paladin"` on **every** call about ret,
+  `findings_*` aside. Without it a tool sims prot, and prot gear, rules and
+  findings do not carry over.
+- `preset` gear is the spec's upstream default set. It ignores the rules
+  (ret's holds Lionheart Helm, Timbermaw Tunic and Arcanite Reaper, which
+  `ret_v1` excludes), so do not compare it with an optimized set as if the
+  optimized set were worse.
+
 ## Metrics
 
 - **TPS / DPS**: threat and damage per second, higher is better.
@@ -47,8 +59,9 @@ Gear arguments take `.gear.siml` text, a findings set id
 ## Rules profiles
 
 The rules decide which items the optimizer may propose (`config/rules/*.json`).
-Ask which profile applies, or default to the last one used (tools default to
-it) and name it in the answer. When presenting an optimize result, list the
+Ask which profile applies, or default to the last one used for the spec
+(tools default to it, else the spec's `default_rules`) and name it in the
+answer. Never run ret under `prot_v3`: it is plate only. When presenting an optimize result, list the
 items the rules excluded that would have ranked higher (`job_result` shows
 them), so the user can see what the rules cost.
 

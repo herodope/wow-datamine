@@ -33,32 +33,55 @@ def _state():
     return jobs.read_json(STATE, {})
 
 
-def default_rules():
-    last = _state().get("last_rules")
+def _spec_def(spec):
+    specs = harness.load_specs()
+    if spec not in specs:
+        raise ValueError(f"unknown spec {spec!r}; known: {', '.join(sorted(specs))}")
+    return specs[spec]
+
+
+def default_rules(spec=None):
+    """The rules profile last used for this spec, else the spec's default_rules.
+
+    Remembered per spec: profiles carry spec constraints (prot_v3 is plate
+    only), so one spec's choice must not carry over to another.
+    """
+    spec = spec or DEFAULT_SPEC
     profiles = list_profiles()
-    if last in profiles:
-        return last
     if not profiles:
         raise ValueError(f"no rules profiles under {harness.rel(config.RULES_DIR)}")
+    last = (_state().get("last_rules_by_spec") or {}).get(spec)
+    if last in profiles:
+        return last
+    dflt = _spec_def(spec).get("default_rules")
+    if dflt in profiles:
+        return dflt
     return profiles[-1]
 
 
-def _remember_rules(name):
+def default_metric(spec=None):
+    return _spec_def(spec or DEFAULT_SPEC).get("default_metric", "tps")
+
+
+def _remember_rules(spec, name):
     st = _state()
-    if st.get("last_rules") != name:
-        st["last_rules"] = name
+    by_spec = st.get("last_rules_by_spec") or {}
+    if by_spec.get(spec) != name:
+        by_spec[spec] = name
+        st["last_rules_by_spec"] = by_spec
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps(st, indent=1), encoding="utf-8")
 
 
 def context(spec=None, rules=None, race=None, log=None):
     spec = spec or DEFAULT_SPEC
-    rname = rules or default_rules()
+    _spec_def(spec)
+    rname = rules or default_rules(spec)
     key = (spec, rname, race, harness.build_info().get("sim_sha"))
     if key not in _ctx_cache or log is not None:
         r = Rules(rname)
         _ctx_cache[key] = Context(spec, r, race, log=log or (lambda m: None))
-    _remember_rules(rname)
+    _remember_rules(spec, rname)
     return _ctx_cache[key]
 
 
@@ -125,8 +148,9 @@ def status():
     lines = [f"sim built from: {(st['sim_sha'] or 'NOT BUILT')[:10]}  (pin {st['pin'][:10]}, "
              f"checkout {(st['head'] or 'missing')[:10]})",
              f"sim item db: {db().sha256[:10]}",
-             f"rules profiles: {', '.join(list_profiles())} (default {default_rules()})",
-             f"specs: {', '.join(harness.load_specs())}",
+             f"rules profiles: {', '.join(list_profiles())}",
+             "specs: " + ", ".join(f"{s} (rules {default_rules(s)}, metric {default_metric(s)})"
+                                   for s in harness.load_specs()),
              f"budgets: {', '.join(BUDGETS)}"]
     lines += [f"PROBLEM: {p}" for p in st["problems"]]
     js = jobs.list_jobs(5)
@@ -187,12 +211,12 @@ def stat_weights(gear="preset", metrics=("tps", "dps", "dtps", "tmi"), targets=(
     return "\n".join(out)
 
 
-def compare_items(gear, slot, items=None, top_n=None, metric="tps", iterations=4000, t05=True,
+def compare_items(gear, slot, items=None, top_n=None, metric=None, iterations=4000, t05=True,
                   spec=None, race=None, encounter=None, targets=1, tschool=None, rules=None):
     ctx = context(spec, rules, race)
     g, label = load_gear(ctx, gear)
     s = parse_slot(slot)
-    obj = parse_objective(metric)
+    obj = parse_objective(metric or default_metric(ctx.spec))
     t05 = parse_bool(t05, "t05")
     enc = _enc(encounter, targets, tschool)
     if items:
@@ -232,12 +256,12 @@ def start_optimize_job(objective, t05, rules_profile=None, budget="quick", seed_
     t05 = parse_bool(t05, "t05")
     if budget not in BUDGETS:
         raise ValueError(f"budget must be one of {', '.join(BUDGETS)}")
-    rname = rules_profile or default_rules()
-    Rules(rname)
-    harness.require_built()
     spec = spec or DEFAULT_SPEC
     harness.preset_path(spec)
-    _remember_rules(rname)
+    rname = rules_profile or default_rules(spec)
+    Rules(rname)
+    harness.require_built()
+    _remember_rules(spec, rname)
     jid = jobs.start("optimize", {"objective": obj.name, "t05": t05, "rules": rname,
                                   "budget": budget, "seed_from": seed_from, "spec": spec,
                                   "race": race})
@@ -382,10 +406,10 @@ def findings_save(job_id, topic, set_name=None):
     return f"saved {job_id} as finding {fid} (findings/{fid}/)"
 
 
-def close_calls(gear, metric="tps", t05=True, n=4, iterations=4000, spec=None, race=None, rules=None):
+def close_calls(gear, metric=None, t05=True, n=4, iterations=4000, spec=None, race=None, rules=None):
     ctx = context(spec, rules, race)
     g, label = load_gear(ctx, gear)
-    obj = parse_objective(metric)
+    obj = parse_objective(metric or default_metric(ctx.spec))
     res = analysis.close_calls(ctx, g, obj, parse_bool(t05, "t05"), n=n, iterations=iterations)
     rows = []
     for r in res:

@@ -19,6 +19,7 @@ carries the workflow, the metric definitions and the gotchas for an agent.
 bisrun/                     Go batch harness, its own module (committed)
 config/specs.json           per-spec pool filters, enchant options, seed sets
 config/presets/<spec>.json  base RaidSimRequest per spec (protojson)
+config/presets/ret_paladin.siml   the setup ret_paladin.json is generated from
 config/rules/<name>.json    exclusion-rule profiles
 findings/<date>_<topic>/    saved results: meta, result, summary.md, gear/*.gear.siml
 scripts/build_sim.py        toolchains, checkout, protos, build
@@ -105,6 +106,18 @@ its APL. For the prot preset its output equals `config/presets/prot_paladin.json
 except for the random seed. A new spec needs that JSON plus an entry in
 `config/specs.json`.
 
+The sim runs APL rotations only. A `defaults.siml` with a `simple:` rotation
+(ret's) gets `TypeSimple`, which the site expands into an APL in TypeScript
+and `preset` warns about. `config/presets/ret_paladin.siml` uses ret's
+`defaults.siml` and `apls/default.apl.siml` with `type apl`. For the default
+build (Unsealed Wrath, Retribution Aura, Crusader assigned) the site's
+expansion is that APL with its variables unchanged and no cooldown rows.
+Regenerate with:
+
+```
+bisrun preset config/presets/ret_paladin.siml > config/presets/ret_paladin.json
+```
+
 ## Tools
 
 | MCP tool | CLI | Read-only |
@@ -123,8 +136,18 @@ except for the random seed. A new spec needs that JSON plus an entry in
 Gear arguments take `.gear.siml` text, a findings set id
 (`2026-11-18_prot_bis/tps_t05`), an optimize job id, a `.siml` path (CLI), or
 `preset`. Item arguments take names or ids from the sim's database. Outputs
-are short markdown tables; every one names the sim sha, rules profile, race,
-iterations and noise.
+are short markdown tables; every one names the sim sha, spec, rules profile,
+race, iterations and noise.
+
+Every tool takes `spec` (`prot_paladin` by default, or `ret_paladin`). The
+rules profile defaults to the last one used for that spec, else the spec's
+`default_rules`; `compare_items` and `close-calls` default to the spec's
+`default_metric`.
+
+| Spec | Preset | Default rules | Default metric | Screened slots |
+|---|---|---|---|---|
+| `prot_paladin` | prot `defaults.siml` | `prot_v3` | `tps` | trinkets, main hand, shield, libram |
+| `ret_paladin` | `ret_paladin.siml` (Unsealed Wrath build, default APL) | `ret_v1` | `dps` | trinkets, two-hander, libram |
 
 - `sim_gear` reports each metric with the standard error of its mean.
 - `stat_weights` and `compare_items` run two paired seeds and report the
@@ -210,6 +233,11 @@ paladin profile: no raid drops or raid rep, no Alliance items, no premier
 PvP epics, no epic BG rep, no Darkspear epics, no world BoE epics, no epic
 crafts, no random suffixes, no other classes' Sunken Temple quest rewards, and
 neither Band of the Better Half nor Elemental Focus Band.
+`ret_v1` is the Horde Undead ret paladin profile: the same exclusions without
+the plate-only rule. Its quest blocklist covers every other class's Sunken
+Temple quest in the sim's db (8232, 8236, 8253, 8257, 8413, 8422, 8425).
+`prot_v3` blocks only 8413, 8422 and 8425, so it still allows Duskbat Drape,
+Arcane Crystal Pendant and Circle of Hope.
 Profiles are JSON, not YAML, so the pipeline stays stdlib-only.
 
 ## Findings
@@ -272,8 +300,13 @@ restart Desktop and call `sim_gear` from a chat.
 
 ## Limits
 
-- One spec is configured (`prot_paladin`). Others need a preset JSON
-  (`bisrun preset`) and a `config/specs.json` entry.
+- Two specs are configured (`prot_paladin`, `ret_paladin`). Others need a
+  preset JSON (`bisrun preset`) and a `config/specs.json` entry.
+- `ret_paladin` sims the Unsealed Wrath build only. The Holy Shock build
+  (`builds/holy_shock.siml`) uses another APL and an item-swap set, and has no
+  preset.
+- The sim db marks Signet of the Soulless Rider (284102) neither unique nor
+  limit-category, so the optimizer can put it in both ring slots.
 - The climb changes one slot at a time; forced-set seeds are how it reaches
   multi-piece bonuses.
 - AoE weights use the preset APL, which is mostly single-target.

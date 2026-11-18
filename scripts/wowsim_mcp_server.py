@@ -51,7 +51,9 @@ server = MCPServer(
         "set, then poll job_status. Always state the iterations and the ± noise you report. "
         "DTPS counts melee only; Stamina's DTPS weight is 0 by definition; TMI is "
         "health-normalised spike damage. Gear arguments take .gear.siml text, a findings set id "
-        "like 2026-11-18_prot_bis/tps_t05, an optimize job id, or 'preset'."),
+        "like 2026-11-18_prot_bis/tps_t05, an optimize job id, or 'preset'. spec: prot_paladin "
+        "(default) or ret_paladin; each spec has its own default rules profile (prot_v3, ret_v1) "
+        "and preset, so pass spec on every call about ret."),
 )
 
 
@@ -97,9 +99,10 @@ async def stat_weights(gear: str = "preset", metrics: list[str] | None = None,
     "(dps|tps|dtps|tmi|dtps_min_hp:N) with measured ± noise, plus the other metrics' deltas "
     "and each item's source. Give items (names or ids) or top_n (best allowed under the rules "
     "profile: a full-sim screen for trinkets/weapons/shields/librams, EP otherwise). Slot: "
-    "head, neck, ..., finger1, finger2, trinket1, trinket2, main_hand, off_hand, ranged."))
+    "head, neck, ..., finger1, finger2, trinket1, trinket2, main_hand, off_hand, ranged. "
+    "metric defaults to the spec's: tps for prot_paladin, dps for ret_paladin."))
 async def compare_items(gear: str, slot: str, items: list[str] | None = None,
-                        top_n: int | None = None, metric: str = "tps", iterations: int = 4000,
+                        top_n: int | None = None, metric: str | None = None, iterations: int = 4000,
                         t05: bool = True, spec: str | None = None, race: str | None = None,
                         encounter: str | None = None, targets: int = 1,
                         tschool: str | None = None, rules_profile: str | None = None) -> str:
@@ -110,7 +113,7 @@ async def compare_items(gear: str, slot: str, items: list[str] | None = None,
 @server.tool(annotations=RUNS, description=(
     "Start a full gear optimization in the background and return its job id at once. "
     "objective: tps|dps|dtps|tmi|dtps_min_hp:<HP>. t05: allow the Soulforge T0.5 set. "
-    "rules_profile: exclusion rules (default: last used). budget: quick (~4 min on 12 threads) | standard "
+    "rules_profile: exclusion rules (default: the last one used for this spec). budget: quick (~4 min on 12 threads) | standard "
     "| thorough. seed_from: optional gear (findings set id, job id) to start from; with t05 on "
     "and no seed_from, the matching no-T0.5 finding seeds it. Poll job_status, then job_result."))
 async def optimize(objective: str, t05: bool, rules_profile: str | None = None,

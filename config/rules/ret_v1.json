@@ -1,0 +1,24 @@
+{
+  "description": "Horde ret paladin, pre-raid + dungeons + PvP rank gear, any armor type. No raid drops or raid rep, no Alliance items, no premier (ilvl 65+) PvP epics, no epic BG rep rewards, no Darkspear epics, no world BoE epics, no epic crafts, no random-suffix items, no other classes' Sunken Temple quest rewards, no Band of the Better Half or Elemental Focus Band.",
+  "faction": "horde",
+  "race": "RaceUndead",
+  "exclude_raid_zones": [3428, 3456, 2677, 2717, 3429, 1977, 2159],
+  "exclude_drop_difficulties": [2],
+  "exclude_rep_factions": [910],
+  "exclude_limit_categories": [710],
+  "exclude_name_patterns": ["Stalwart", "Sageblade", "Enchanted Thorium", "Chromatic", "Onyxia", "Dragonslayer", "Quel'Serrar", "High Warlord"],
+  "exclude_alliance_patterns": ["Marshal", "Knight", "Lieutenant Commander", "Master Sergeant", "Sergeant Major", "Corporal", "Private", "Commander's", "Sentinel's", "Silverwing", "Stormpike", "Highlander's", "Arathor", "Chevalier", "Luminous", "Alliance"],
+  "exclude_premier_epic_pvp": {"name_prefix": "Premier", "min_ilvl": 65},
+  "exclude_epic_bg_rep": {
+    "vendors": ["Kelm Hargunth", "Rutherford Twing", "Gaelden Hammersmith", "Thanthaldis Snowgleam", "Jekyll Flandring", "Brakgul Deathbringer", "Samuel Hawke", "Illiyana Moonblaze"],
+    "source_substrings": ["Alterac"],
+    "name_prefixes": ["Defiler's", "Outrider's", "Frostwolf", "Warsong", "Highlander's"]
+  },
+  "exclude_darkspear_epics": {"rep_faction": 2798, "min_quality": 4},
+  "exclude_world_boe_epics": {"max_unsourced_id": 200000},
+  "exclude_quest_ids": [8232, 8236, 8253, 8257, 8413, 8422, 8425],
+  "exclude_item_ids": [284716, 20682],
+  "exclude_epic_crafts": true,
+  "exclude_random_suffix": true,
+  "allow_unknown_source": true
+}
